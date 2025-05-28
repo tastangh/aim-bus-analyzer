@@ -1,0 +1,3 @@
+set(SOURCEFILES
+    ${CMAKE_CURRENT_LIST_DIR}/bm.cpp
+)
