@@ -14,11 +14,16 @@ target_compile_definitions(bm PUBLIC
 )
 
 target_link_libraries(bm PRIVATE 
+    ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/lib/libwx_baseu_net-3.2.so.0
+    ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/lib/libwx_baseu-3.2.so.0
+    ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/lib/libwx_gtk3u_core-3.2.so.0
     ${CMAKE_CURRENT_LIST_DIR}/../../deps/aim-driver/lib/libaim_mil.so
 )
 
 target_include_directories(bm PUBLIC ${INCLUDEDIRS}
     ${CMAKE_CURRENT_LIST_DIR}
     ${CMAKE_CURRENT_LIST_DIR}/../../deps/aim-driver/include/aim_mil_24.22
-
+    ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/include
+    ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/lib/wx/include/gtk3-unicode-3.2
+    ${CMAKE_CURRENT_LIST_DIR}/ui
 )
