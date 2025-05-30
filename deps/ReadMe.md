@@ -3,7 +3,7 @@
 ## How I created deps/wxwidgets
 
 1. Run `sudo apt install libgtk-3-dev`
-1. Download and unzip https://github.com/wxWidgets/wxWidgets/releasesdownload/v3.2.6/wxWidgets-3.2.6.tar.bz2
+1. Download and unzip https://github.com/wxWidgets/wxWidgets/releases/download/v3.2.8/wxWidgets-3.2.8.tar.bz2
 1. cd into this downloaded dir
 1. Create a dir called `gtk-build` and cd into it
 1. Run `../configure`
