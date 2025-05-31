@@ -1,20 +1,19 @@
 #include "mainWindow.hpp"
 #include "bm.hpp"
 #include "milStd1553.hpp"
-#include <nlohmann/json.hpp> // Bu ve altındakiler config için
+#include <nlohmann/json.hpp> 
 #include <fstream>
 #include <string>
-#include <regex>   // wxString regex'i desteklemiyorsa std::regex için
-#include <wx/arrstr.h> // wxArrayString için
-#include <wx/tokenzr.h> // wxStringTokenizer için (wxSplit yerine alternatif)
+#include <regex>   
+#include <wx/arrstr.h> 
+#include <wx/tokenzr.h> 
 
-// CONFIG_PATH ve Logger tanımları eksik, varsayımsal olarak ekliyorum.
-// Gerçek projenizde bu tanımlar olmalı.
+
 #ifndef CONFIG_PATH
-#define CONFIG_PATH "config.json" // Veya uygun bir yol
+#define CONFIG_PATH "config.json" 
 #endif
 
-namespace Logger { // Basit bir logger mock'u
+namespace Logger { 
     void error(const std::string& msg) { wxLogError("%s", msg.c_str()); }
     void info(const std::string& msg) { wxLogMessage("%s", msg.c_str()); }
 }
@@ -70,9 +69,9 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
 
     m_milStd1553Tree =
         new wxTreeCtrl(this, ID_RT_SA_TREE, wxDefaultPosition,
-                        wxSize(200, -1), wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT); // Ağaç stili
+                        wxSize(200, -1), wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT); 
 
-    auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses"); // Kök gizli olsa da gerekli
+    auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses"); 
     for (size_t i = 0; i < MilStd1553::getInstance().busList.size(); ++i) {
         auto& bus = MilStd1553::getInstance().busList.at(i);
         bus.setTreeObject(m_milStd1553Tree->AppendItem(rtSaTreeRoot, bus.getName()));
@@ -84,7 +83,7 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
                 sa.setTreeObject(m_milStd1553Tree->AppendItem(rt.getTreeObject(), sa.getName()));
             }
         }
-        if (i == 0) m_milStd1553Tree->Expand(bus.getTreeObject()); // İlk bus'ı aç
+        if (i == 0) m_milStd1553Tree->Expand(bus.getTreeObject()); 
     }
 
 
@@ -98,27 +97,25 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     topHorizontalSizer->Add(deviceIdText, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 5);
     topHorizontalSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topHorizontalSizer->Add(m_startStopButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5); // 1 for expand
+    topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5); 
     topHorizontalSizer->Add(clearButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
 
     auto *bottomHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
-    bottomHorizontalSizer->Add(m_milStd1553Tree, 0, wxEXPAND | wxALL, 5); // wxEXPAND for height
-    bottomHorizontalSizer->Add(m_messageList, 1, wxEXPAND | wxALL, 5);    // 1 for expand
-
+    bottomHorizontalSizer->Add(m_milStd1553Tree, 0, wxEXPAND | wxALL, 5); 
+    bottomHorizontalSizer->Add(m_messageList, 1, wxEXPAND | wxALL, 5);   
     auto *mainVerticalSizer = new wxBoxSizer(wxVERTICAL);
     mainVerticalSizer->Add(topHorizontalSizer, 0, wxEXPAND | wxALL, 5);
-    mainVerticalSizer->Add(bottomHorizontalSizer, 1, wxEXPAND | wxALL, 5); // 1 for expand
+    mainVerticalSizer->Add(bottomHorizontalSizer, 1, wxEXPAND | wxALL, 5);
 
     SetSizer(mainVerticalSizer);
-    SetMinSize(wxSize(800, 600)); // Minimum pencere boyutu
+    SetMinSize(wxSize(800, 600)); 
     Centre();
 
 
     CreateStatusBar();
     SetStatusText("Ready, press Start");
 
-    // JSON config
-    m_uiRecentMessageCount = 2000; // Default
+    m_uiRecentMessageCount = 2000; 
     nlohmann::json configJson;
     std::ifstream ifs(CONFIG_PATH);
     if (ifs.is_open()) {
@@ -143,24 +140,20 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
         Logger::info("Config file not found: " + std::string(CONFIG_PATH) + ". Using defaults.");
     }
 
-    // BM Sınıfına UI Güncelleme Callback'lerini ata
     BM::getInstance().setUpdateMessagesCallback(
         [this](const std::string& messages) {
-            // wxWidgets UI elemanlarına erişim her zaman ana thread'den yapılmalı
             if (wxIsMainThread()) {
                  appendMessagesToUi(wxString::FromUTF8(messages.c_str()));
             } else {
-                wxTheApp->CallAfter([this, messages] { // wxString kopyası oluştur
+                wxTheApp->CallAfter([this, messages] {
                     appendMessagesToUi(wxString::FromUTF8(messages.c_str()));
                 });
             }
         }
     );
-     // BM::getInstance().setUpdateTreeItemCallback(...); // Gerekirse
 }
 
 BusMonitorFrame::~BusMonitorFrame() {
-    // BM::getInstance().stop(); // OnCloseFrame'de zaten var
 }
 
 void BusMonitorFrame::appendMessagesToUi(const wxString& newMessagesChunk) {
@@ -172,19 +165,18 @@ void BusMonitorFrame::appendMessagesToUi(const wxString& newMessagesChunk) {
         long pos = 0;
         for (int i = 0; i < linesToRemove; ++i) {
             pos = m_messageList->XYToPosition(0, i + 1);
-            if (pos == -1 && i < linesToRemove -1) { // Eğer satır sonu karakteri yoksa ve son satır değilse, bir sonraki satırın başını bul
+            if (pos == -1 && i < linesToRemove -1) { 
                  pos = m_messageList->XYToPosition(0,i+2);
-                 if(pos == -1) { // hala bulunamadıysa, döngüden çık
+                 if(pos == -1) {
                      Logger::error("Could not determine position to remove lines.");
                      return;
                  }
-            } else if (pos == -1 && i == linesToRemove -1) { // Son satır ve satır sonu yoksa
-                pos = m_messageList->GetLastPosition(); // Tümünü silmek için
+            } else if (pos == -1 && i == linesToRemove -1) { 
+                pos = m_messageList->GetLastPosition(); 
             }
         }
          if (pos > 0) m_messageList->Remove(0, pos);
     }
-   // m_messageList->ShowPosition(m_messageList->GetLastPosition()); // Sürekli scroll CPU kullanır
 }
 
 void BusMonitorFrame::updateTreeItemVisualState(char bus, int rt, int sa, bool isActive) {
@@ -194,7 +186,7 @@ void BusMonitorFrame::updateTreeItemVisualState(char bus, int rt, int sa, bool i
 void BusMonitorFrame::onStartStopClicked(wxCommandEvent & /*event*/) {
     if (BM::getInstance().isMonitoring()) {
         SetStatusText("Stopping monitoring...");
-        BM::getInstance().stop(); // Bu artık bloklayıcı değil, thread'i sonlandırma isteği gönderir
+        BM::getInstance().stop();
         m_startStopButton->SetLabelText("Start");
         m_startStopButton->SetBackgroundColour(wxColour("#ffcc00"));
         m_startStopButton->SetForegroundColour(
@@ -211,8 +203,8 @@ void BusMonitorFrame::onStartStopClicked(wxCommandEvent & /*event*/) {
 
         ConfigBmUi bmConfig;
         bmConfig.ulDevice = static_cast<AiUInt32>(deviceNumLong);
-        bmConfig.ulStream = 1; // UI'dan alınabilir
-        bmConfig.ulCoupling = API_CAL_CPL_TRANSFORM; // UI'dan alınabilir
+        bmConfig.ulStream = 1; 
+        bmConfig.ulCoupling = API_CAL_CPL_TRANSFORM; 
 
         SetStatusText("Starting monitoring on device " + m_deviceIdTextInput->GetValue() + "...");
         AiReturn bmStartRet = BM::getInstance().start(bmConfig);
@@ -247,10 +239,7 @@ void BusMonitorFrame::onClearClicked(wxCommandEvent & /*event*/) {
 }
 
 void BusMonitorFrame::onTreeItemClicked(wxTreeEvent &event) {
-    // ... (önceki filtreleme mantığınız buraya gelecek, BM::getInstance() kullanarak) ...
-    // BM::getInstance().setFilterCriteria(busChar, rtId, saId);
-    // BM::getInstance().enableFilter(true);
-    // UI güncellemesi
+    // filtreleme mantığı buraya gelecek
     wxLogMessage("Tree item clicked: %s", m_milStd1553Tree->GetItemText(event.GetItem()));
 }
 
@@ -260,8 +249,7 @@ void BusMonitorFrame::onExit(wxCommandEvent & /*event*/) {
 
 void BusMonitorFrame::onCloseFrame(wxCloseEvent& event) {
     if (BM::getInstance().isMonitoring()) {
-        BM::getInstance().stop(); // Thread'i durdur ve kaynakları serbest bırak
+        BM::getInstance().stop();
     }
-    // wxApp::OnExit() içinde ApiExit() çağrılacak (BM destructor'ı aracılığıyla)
-    event.Skip(); // Çerçeveyi normal şekilde kapatmasına izin ver
+    event.Skip();
 }

@@ -37,7 +37,6 @@ private:
   void updateTreeItemVisualState(char bus, int rt, int sa, bool isActive);
 
   int m_uiRecentMessageCount;
-  // std::mutex m_uiMutex; // wxTheApp->CallAfter UI thread senkronizasyonunu sağlar
   wxTextCtrl *m_deviceIdTextInput;
   wxTreeCtrl *m_milStd1553Tree;
   wxTextCtrl *m_messageList;

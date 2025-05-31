@@ -2,10 +2,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h> // sleep fonksiyonu için (Linux/macOS)
-// #include <windows.h> // Sleep fonksiyonu için (Windows)
+#include <unistd.h> 
 
-// Hata kontrolü için yardımcı fonksiyon
 void check_api_status(AiReturn status_code, const char* operation_name) {
     if (status_code != API_OK) {
         char error_message_buffer[256];
@@ -17,10 +15,6 @@ void check_api_status(AiReturn status_code, const char* operation_name) {
         }
         fprintf(stderr, "BC HATA: %s basarisiz oldu! Kod: %d, Mesaj: %s\n",
                 operation_name, status_code, error_message_buffer);
-        // Önemli: Hata durumunda açılmışsa module_handle'ı kapatmayı düşünün.
-        // Global bir değişkende handle tutuluyorsa:
-        // extern AiUInt32 g_bc_module_handle; // Örnek
-        // if (g_bc_module_handle != 0) ApiClose(g_bc_module_handle);
         exit(1);
     } else {
         printf("BC BASARILI: %s\n", operation_name);
@@ -30,7 +24,7 @@ void check_api_status(AiReturn status_code, const char* operation_name) {
 int main() {
     AiReturn api_status;
     AiUInt32 bc_module_handle = 0;
-    AiUInt8 bc_biu_selection = API_BIU_1; // ApiOpenEx sonrası genellikle önemsiz, handle içinde stream bilgisi var
+    AiUInt8 bc_biu_selection = API_BIU_1;
 
     printf("MIL-STD-1553 BC Uygulamasi (Standart Cerceve) Baslatiliyor...\n");
 
@@ -45,7 +39,7 @@ int main() {
     TY_API_OPEN bc_open_params;
     memset(&bc_open_params, 0, sizeof(TY_API_OPEN));
     bc_open_params.ul_Module = 0;
-    bc_open_params.ul_Stream = 1; // BC için Stream 1
+    bc_open_params.ul_Stream = 1;
     strcpy(bc_open_params.ac_SrvName, "local");
     api_status = ApiOpenEx(&bc_open_params, &bc_module_handle);
     check_api_status(api_status, "ApiOpenEx (BC Stream)");
@@ -58,17 +52,15 @@ int main() {
                              API_DIS, API_ENA, API_TBM_TRANSFER, API_BC_XFER_BUS_PRIMARY);
     check_api_status(api_status, "ApiCmdBCIni");
 
-    // BC Arabellek Başlığını Tanımla
     TY_API_BC_BH_INFO bc_bh_info_send;
     memset(&bc_bh_info_send, 0, sizeof(TY_API_BC_BH_INFO));
     const AiUInt16 BC_SEND_HID = 1;
-    const AiUInt16 BC_SEND_BID = 1; // Bu Buffer ID'ye veri yazılacak
+    const AiUInt16 BC_SEND_BID = 1; 
     api_status = ApiCmdBCBHDef(bc_module_handle, bc_biu_selection,
                                BC_SEND_HID, BC_SEND_BID, 0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC,
                                0, 0, 0, 0, &bc_bh_info_send);
     check_api_status(api_status, "ApiCmdBCBHDef (BC Gönderme Başlığı)");
 
-    // BC Transfer Parametrelerini Tanımla
     TY_API_BC_XFER bc_transfer_params;
     memset(&bc_transfer_params, 0, sizeof(TY_API_BC_XFER));
     const AiUInt16 TRANSFER_ID_1 = 1;
@@ -98,19 +90,18 @@ int main() {
     data_to_send[0] = 0xAAAA;
     data_to_send[1] = 0xBBBB;
 
-    AiUInt16 return_buffer_id;     // rid için değişken
-    AiUInt32 return_buffer_address; // raddr için değişken
+    AiUInt16 return_buffer_id;    
+    AiUInt32 return_buffer_address; 
 
     api_status = ApiCmdBufDef(bc_module_handle, bc_biu_selection, API_BUF_BC_MSG,
                               BC_SEND_HID, BC_SEND_BID,
                               bc_transfer_params.wcnt,
                               data_to_send,
-                              &return_buffer_id,      // Düzeltilmiş: rid'in adresi
-                              &return_buffer_address  // Düzeltilmiş: raddr'ın adresi
+                              &return_buffer_id,     
+                              &return_buffer_address  
                              );
     check_api_status(api_status, "ApiCmdBufDef (BC Veri Yazma)");
 
-    // Minor Frame Tanımla
     TY_API_BC_FRAME bc_minor_frame;
     memset(&bc_minor_frame, 0, sizeof(TY_API_BC_FRAME));
     bc_minor_frame.id = 1;
@@ -120,22 +111,16 @@ int main() {
     api_status = ApiCmdBCFrameDef(bc_module_handle, bc_biu_selection, &bc_minor_frame);
     check_api_status(api_status, "ApiCmdBCFrameDef (Minor Frame 1)");
 
-    // Major Frame Tanımla (ApiCmdBCMFrameDefEx için doğru tip)
-    TY_API_BC_MFRAME_EX bc_major_frame_ex; // Düzeltilmiş tip
+    TY_API_BC_MFRAME_EX bc_major_frame_ex; 
     memset(&bc_major_frame_ex, 0, sizeof(TY_API_BC_MFRAME_EX));
     bc_major_frame_ex.cnt = 1;
-    // bc_major_frame_ex.padding1; // memset ile sıfırlandı
     bc_major_frame_ex.fid[0] = bc_minor_frame.id;
 
-    api_status = ApiCmdBCMFrameDefEx(bc_module_handle, bc_biu_selection, &bc_major_frame_ex); // Düzeltilmiş değişken
+    api_status = ApiCmdBCMFrameDefEx(bc_module_handle, bc_biu_selection, &bc_major_frame_ex); 
     check_api_status(api_status, "ApiCmdBCMFrameDefEx");
 
-    // BC Operasyonunu Başlat
     AiUInt32 maj_frame_addr_out;
-    // MAX_API_BC_MFRAME_EX başlık dosyasında tanımlı olmalı (genellikle Api1553i_def.h)
-    // Eğer tanımlı değilse, uygun bir boyut (örneğin 512) manuel olarak girilebilir.
-    // Bu örnekte sadece 1 minor frame olduğundan, dizi boyutu 1 bile yeterli olurdu.
-    AiUInt32 min_frame_addr_out[MAX_API_BC_MFRAME_EX]; // AIM başlık dosyasındaki sabiti kullanın
+     AiUInt32 min_frame_addr_out[MAX_API_BC_MFRAME_EX]; 
 
     printf("BC: BC operasyonu baslatiliyor...\n");
     api_status = ApiCmdBCStart(bc_module_handle, bc_biu_selection,
@@ -149,7 +134,6 @@ int main() {
     printf("BC: Transfer baslatildi. Yanit icin 2 saniye bekleniyor...\n");
     sleep(2);
 
-    // Transfer Durumunu Oku
     TY_API_BC_XFER_DSP xfer_stat_report;
     api_status = ApiCmdBCXferRead(bc_module_handle, bc_biu_selection, TRANSFER_ID_1, 0x7, &xfer_stat_report);
      if (api_status == API_OK) {
@@ -168,17 +152,13 @@ int main() {
                     bc_transfer_params.rcv_rt, xfer_stat_report.st1);
         }
     } else {
-        // ApiCmdBCXferRead başarısız olduysa (zaman aşımı veya başka bir API hatası)
-        // check_api_status zaten hatayı basacaktır.
         fprintf(stderr, "BC UYARI: ApiCmdBCXferRead basarisiz oldu, RT'den yanit alinmamis olabilir.\n");
         check_api_status(api_status, "ApiCmdBCXferRead (Transfer Durumu Okuma)");
     }
 
-    // BC Operasyonunu Durdur
     api_status = ApiCmdBCHalt(bc_module_handle, bc_biu_selection);
     check_api_status(api_status, "ApiCmdBCHalt");
 
-    // BC Stream'ini Kapat
     api_status = ApiClose(bc_module_handle);
     check_api_status(api_status, "ApiClose (BC Stream)");
 

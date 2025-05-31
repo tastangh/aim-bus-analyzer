@@ -2,17 +2,16 @@
 #include <stdio.h>
 #include <cstring>
 #include <chrono>
-#include <inttypes.h> // PRIu64 için
+#include <inttypes.h> 
 
-// Hata kontrol makrosu. BM* parametresi this pointer'ı için
 #define AIM_CHECK_BM_ERROR(retVal, funcName, bmInstancePtr) \
     if (retVal != API_OK) { \
         const char* errMsgPtr = ApiGetErrorMessage(retVal); \
         fprintf(stderr, "ERROR in BM::%s: %s (0x%04X) at %s:%d\n", funcName, errMsgPtr ? errMsgPtr : "Unknown Error", retVal, __FILE__, __LINE__); \
-        if (bmInstancePtr) { /* bmInstancePtr geçerliyse stop çağır */ \
-             /* bmInstancePtr->stop(); // Bu reentrant çağrıya neden olabilir, dikkat! */ \
+        if (bmInstancePtr) {  \
+              \
         } \
-        /* API Kapatma işlemleri daha üst seviyede veya destructor'da yönetilmeli */ \
+         \
         return retVal; \
     }
 
@@ -41,11 +40,8 @@ BM::~BM() {
     if (isMonitoring()) {
         stop();
     }
-    shutdownBoard(); // ApiClose'u içerir
-    // ApiExit'in uygulama ömründe bir kez çağrıldığından emin olun.
-    // Genellikle wxApp::OnExit() gibi bir yerde olur.
-    // Eğer bu sınıf uygulama boyunca tek AIM API kullanıcısı ise burada da düşünülebilir,
-    // ama dikkatli olunmalı.
+    shutdownBoard(); 
+
     printf("BM instance destroyed. Calling ApiExit.\n");
     ApiExit();
 }
@@ -58,7 +54,7 @@ AiReturn BM::initializeBoard(const ConfigBmUi& config) {
         ret = ApiInit();
         if (ret <= 0) {
             fprintf(stderr, "BM::initializeBoard - ApiInit failed or no boards found. Ret: %d\n", ret);
-            return ret; // Hata kodu döndür, AIM_CHECK_BM_ERROR burada uygun değil
+            return ret; 
         }
         printf("BM::initializeBoard - ApiInit successful, found %d board(s).\n", ret);
         apiLibraryInitialized = true;
@@ -68,7 +64,7 @@ AiReturn BM::initializeBoard(const ConfigBmUi& config) {
     memset(&xApiOpen, 0, sizeof(xApiOpen));
     xApiOpen.ul_Module = config.ulDevice;
     xApiOpen.ul_Stream = config.ulStream;
-    strcpy(xApiOpen.ac_SrvName, "local"); // UI'dan alınabilir veya sabit olabilir
+    strcpy(xApiOpen.ac_SrvName, "local"); 
 
     ret = ApiOpenEx(&xApiOpen, &m_ulModHandle);
     if (ret != API_OK) {
@@ -94,10 +90,9 @@ AiReturn BM::initializeBoard(const ConfigBmUi& config) {
 void BM::shutdownBoard() {
     if (m_ulModHandle != 0) {
         printf("BM::shutdownBoard - Closing ModuleHandle: 0x%X\n", m_ulModHandle);
-        ApiClose(m_ulModHandle); // Hata kontrolü eklenebilir
+        ApiClose(m_ulModHandle); 
         m_ulModHandle = 0;
     }
-    // ApiExit() ~BM() içinde çağrılıyor.
 }
 
 AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
@@ -118,7 +113,7 @@ AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
     // BM Capture Mode
     TY_API_BM_CAP_SETUP bmCapSetup;
     memset(&bmCapSetup, 0, sizeof(bmCapSetup));
-    bmCapSetup.cap_mode = API_BM_CAPMODE_RECORDING; // Sürekli kayıt
+    bmCapSetup.cap_mode = API_BM_CAPMODE_RECORDING; 
     printf("BM::configureBusMonitor - Setting BM Capture Mode...\n");
     ret = ApiCmdBMCapMode(m_ulModHandle, (AiUInt8)config.ulStream, &bmCapSetup);
     AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdBMCapMode", this);
@@ -129,15 +124,13 @@ AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
 AiReturn BM::openDataQueue() {
     AiReturn ret = API_OK;
     m_dataQueueId = (m_currentConfig.ulStream == 1) ? API_DATA_QUEUE_ID_BM_REC_BIU1 : API_DATA_QUEUE_ID_BM_REC_BIU2;
-    // Diğer stream'ler için ID'ler kılavuzdan kontrol edilmeli
     AiUInt32 queueSizeOnCard = 0;
     printf("BM::openDataQueue - Opening Data Queue (ID: %u)...\n", m_dataQueueId);
     ret = ApiCmdDataQueueOpen(m_ulModHandle, m_dataQueueId, &queueSizeOnCard); 
     AIM_CHECK_BM_ERROR(ret, "openDataQueue/ApiCmdDataQueueOpen", this);
     if (queueSizeOnCard == 0) {
         fprintf(stderr, "BM::openDataQueue - Error: Data Queue ASP size is 0.\n");
-        return API_ERR_NAK; // Veya API_ERR_GENERAL veya uygun başka bir AIM hata kodu
-                               // API_ERR_CONFIG genellikle yapılandırma ile ilgili sorunlar için kullanılır.
+        return API_ERR_NAK;
     }
     printf("BM::openDataQueue - Data Queue opened. Onboard ASP Queue Size: %u bytes\n", queueSizeOnCard);
 
@@ -151,10 +144,10 @@ AiReturn BM::openDataQueue() {
 void BM::closeDataQueue() {
     if (m_ulModHandle != 0 && m_dataQueueId != 0) {
         printf("BM::closeDataQueue - Stopping Data Queue Control...\n");
-        ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_STOP); // Hata kontrolü?
+        ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_STOP); 
 
         printf("BM::closeDataQueue - Closing Data Queue (ID: %u)...\n", m_dataQueueId);
-        ApiCmdDataQueueClose(m_ulModHandle, m_dataQueueId); // Hata kontrolü?
+        ApiCmdDataQueueClose(m_ulModHandle, m_dataQueueId); 
         m_dataQueueId = 0;
     }
 }
@@ -194,7 +187,7 @@ AiReturn BM::start(const ConfigBmUi& config) {
 
 void BM::stop() {
     printf("BM::stop - Stop requested.\n");
-    m_shutdownRequested.store(true); // Önce flag'i set et
+    m_shutdownRequested.store(true);
 
     if (m_monitorThread.joinable()) {
         m_monitorThread.join();
@@ -204,12 +197,9 @@ void BM::stop() {
     if (m_ulModHandle != 0) {
         printf("BM::stop - Halting Bus Monitor HW...\n");
         ApiCmdBMHalt(m_ulModHandle, (AiUInt8)m_currentConfig.ulStream);
-        closeDataQueue(); // Bu, ApiCmdBMHalt'tan sonra olmalı
+        closeDataQueue(); 
     }
-    // shutdownBoard() ~BM() içinde çağrılacak veya UI tarafında explicit olarak çağrılabilir.
-    // Eğer stop UI'dan çağrılıyorsa ve uygulama devam edecekse shutdownBoard() burada çağrılmamalı.
-    // Sadece izlemeyi durdurmuş oluruz.
-    m_monitoringActive.store(false); // En son durumu güncelle
+    m_monitoringActive.store(false); 
     printf("BM::stop - Monitoring stopped.\n");
 }
 
@@ -247,22 +237,22 @@ void BM::monitorThreadFunc() {
         if (ret != API_OK) {
             fprintf(stderr, "BM::monitorThreadFunc - ApiCmdDataQueueRead ERROR: %s (0x%X). Exiting thread.\n",
                    getAIMApiErrorMessage(ret).c_str(), ret);
-            break; // Hata durumunda döngüden çık
+            break; 
         }
 
         if (queueStatus.bytes_transfered > 0) {
             processAndRelayData(m_rxDataBuffer.data(), queueStatus.bytes_transfered);
         } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20)); // Kuyruğu çok sık sorgulama
+            std::this_thread::sleep_for(std::chrono::milliseconds(20)); 
         }
     }
-    m_monitoringActive.store(false); // Ensure flag is false on exit
+    m_monitoringActive.store(false); 
     printf("BM::monitorThreadFunc - Thread finished.\n");
 }
 
 void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     std::string chunkStringForUi;
-    char tempLineBuffer[1024]; // Tek bir Monitor Word + parse edilmiş hali için yeterli olmalı
+    char tempLineBuffer[1024];
 
     AiUInt32 numMonitorWords = bytesRead / 4;
     const AiUInt32* pMonitorWords = reinterpret_cast<const AiUInt32*>(buffer);
@@ -270,18 +260,8 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     for (AiUInt32 i = 0; i < numMonitorWords; ++i) {
         AiUInt32 monitorWord = pMonitorWords[i];
         AiUInt8 type  = (monitorWord >> 28) & 0x0F;
-        // AiUInt8 cFlag = (monitorWord >> 27) & 0x01; // cFlag'i şu an kullanmıyoruz
         AiUInt32 entryData = monitorWord & 0x07FFFFFF;
 
-        // Filtreleme mantığı burada uygulanabilir
-        // if (m_filterEnabled.load()) {
-        //    if (!applyFilterLogic(type, entryData & 0xFFFF /*busWord kısmı*/)) {
-        //        continue; // Bu kaydı atla
-        //    }
-        // }
-
-        // Veriyi string'e formatla
-        // snprintf daha güvenli
         snprintf(tempLineBuffer, sizeof(tempLineBuffer), "Idx %3u: Raw=0x%08X, Type=0x%X\n", i, monitorWord, type);
         chunkStringForUi += tempLineBuffer;
 
@@ -308,7 +288,6 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     }
 }
 
-// String'e yazan parse yardımcı fonksiyonları
 void BM::helperParseCommandWord(AiUInt16 cmdWord, std::string& out) {
     char buf[128];
     AiUInt8 rtAddr = (cmdWord >> 11) & 0x1F;
@@ -362,13 +341,12 @@ void BM::helperParseBusWordEntry(AiUInt32 entryData, AiUInt8 type, std::string& 
     }
 }
 void BM::helperParseErrorWordEntry(AiUInt32 entryData, std::string& out) {
-    char buf[256]; // Daha fazla detay için yer
+    char buf[256]; 
     AiUInt8 transmitRTFlag   = (entryData >> 17) & 0x01;
     AiUInt8 receiveRTFlag    = (entryData >> 16) & 0x01;
     AiUInt16 errorType       = entryData & 0xFFFF;
     snprintf(buf, sizeof(buf), "    ERR: T_RT=%u, R_RT=%u, Mask=0x%04X\n", transmitRTFlag, receiveRTFlag, errorType);
     out += buf;
-    // Hata bitlerini tek tek ekleyebilirsiniz
 }
 
 void BM::helperParseTimeTagLowEntry(AiUInt32 entryData, std::string& out) {
@@ -407,15 +385,12 @@ void BM::setFilterCriteria(char bus, int rt, int sa) {
     printf("BM::setFilterCriteria - Bus: %c, RT: %d, SA: %d\n", bus, rt, sa);
 }
 
-// Filtreleme mantığı için örnek bir iskelet (processAndRelayData içinde çağrılacak)
 bool BM::applyFilterLogic(AiUInt8 type, AiUInt16 busWord) {
     if (!m_filterEnabled.load()) {
-        return true; // Filtre kapalıysa her şeyi göster
+        return true; 
     }
 
-    std::lock_guard<std::mutex> lock(m_filterMutex); // Filtre kriterlerine erişirken kilitle
-
-    // Bus filtresi (Primary/Secondary)
+    std::lock_guard<std::mutex> lock(m_filterMutex); 
     char currentBusChar = 0;
     if (type >= 0x8 && type <= 0xB) currentBusChar = 'A'; // Primary
     else if (type >= 0xC && type <= 0xF) currentBusChar = 'B'; // Secondary

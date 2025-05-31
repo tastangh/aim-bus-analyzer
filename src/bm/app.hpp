@@ -5,5 +5,5 @@
 class BusMonitorApp : public wxApp {
 public:
   bool OnInit() override;
-  int OnExit() override; // ApiExit'i çağırmak için
+  int OnExit() override; 
 };
