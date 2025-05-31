@@ -10,7 +10,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/SourceFiles.cmake)
 add_executable(bm ${SOURCEFILES})
 
 target_compile_definitions(bm PUBLIC
-    _AIM_LINUX
+    _FILE_OFFSET_BITS=64 WXUSINGDLL __WXGTK__ _AIM_LINUX
 )
 
 target_link_libraries(bm PRIVATE 
