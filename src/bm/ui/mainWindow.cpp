@@ -7,7 +7,7 @@
 #include <wx/arrstr.h> 
 
 #ifndef CONFIG_PATH
-#define CONFIG_PATH "config.json" 
+#define CONFIG_PATH "../config.json" 
 #endif
 
 namespace Logger { 
