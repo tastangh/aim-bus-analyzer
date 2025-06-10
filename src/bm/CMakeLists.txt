@@ -22,6 +22,7 @@ target_link_libraries(bm PRIVATE
 
 target_include_directories(bm PUBLIC ${INCLUDEDIRS}
     ${CMAKE_CURRENT_LIST_DIR}
+    ${CMAKE_CURRENT_LIST_DIR}/../
     ${CMAKE_CURRENT_LIST_DIR}/../../deps/aim-driver/include/aim_mil_24.22
     ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/include
     ${CMAKE_CURRENT_LIST_DIR}/../../deps/wxWidgets/lib/wx/include/gtk3-unicode-3.2

@@ -3,6 +3,8 @@
 #include <mutex>
 #include <wx/treectrl.h>
 #include <wx/wx.h>
+#include "common.hpp"
+
 
 enum {
   ID_ADD_BTN = 1,

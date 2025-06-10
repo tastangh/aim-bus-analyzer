@@ -6,10 +6,6 @@
 #include <string>
 #include <wx/arrstr.h> 
 
-#ifndef CONFIG_PATH
-#define CONFIG_PATH "../config.json" 
-#endif
-
 namespace Logger { 
     void error(const std::string& msg) { wxLogError("%s", msg.c_str()); }
     void info(const std::string& msg) { wxLogMessage("%s", msg.c_str()); }
@@ -109,7 +105,7 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     // If the file doesn't exist or is malformed, it logs the issue and proceeds with defaults.
     m_uiRecentMessageCount = 2000; 
     nlohmann::json configJson;
-    std::ifstream ifs(CONFIG_PATH);
+    std::ifstream ifs(Common::CONFIG_PATH);
     if (ifs.is_open()) {
         try {
             ifs >> configJson;
@@ -123,10 +119,10 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
                 }
             }
         } catch (const nlohmann::json::parse_error &e) {
-            Logger::error("JSON parse error in " + std::string(CONFIG_PATH) + ": " + std::string(e.what()));
+            Logger::error("JSON parse error in " + std::string(Common::CONFIG_PATH) + ": " + std::string(e.what()));
         }
     } else {
-        Logger::info("Config file not found: " + std::string(CONFIG_PATH) + ". Using defaults.");
+        Logger::info("Config file not found: " + std::string(Common::CONFIG_PATH) + ". Using defaults.");
     }
     
     // 3. --- Backend Communication Setup ---
