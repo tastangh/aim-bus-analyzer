@@ -13,7 +13,7 @@
         return retVal; \
     }
 
-void BM::MessageTransaction::clear() {
+void BM::MessageTransaction::clear() { // Mode code'lar her zaman 1 veri kelimesi içerir.
     full_timetag = 0; last_timetag_l_data = 0; last_timetag_h_data = 0;
     cmd1 = 0; bus1 = 0; cmd1_valid = false;
     cmd2 = 0; bus2 = 0; cmd2_valid = false;
@@ -51,7 +51,6 @@ BM::~BM() {
     ApiExit();
 }
 
-// ... initializeBoard'dan monitorThreadFunc'a kadar olan tüm fonksiyonlar değişmedi ...
 AiReturn BM::initializeBoard(const ConfigBmUi& config) {
     AiReturn ret = API_OK; static bool apiLibraryInitialized = false;
     if (!apiLibraryInitialized) { ret = ApiInit(); if (ret <= 0) return ret < 0 ? (AiReturn)ret : API_ERR_NAK; apiLibraryInitialized = true; }
@@ -117,7 +116,6 @@ void BM::monitorThreadFunc() {
     m_monitoringActive.store(false); 
 }
 
-// *** DEĞİŞİKLİK BURADA: Veri olmasa bile placeholder basan yeni formatlama mantığı ***
 void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string& outString) {
     if (!trans.cmd1_valid) return;
 
@@ -174,27 +172,23 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
     if (!trans.stat1_valid) ss << " (No Response)";
     ss << "\n";
 
-    // --- YENİ VERİ BASMA MANTIĞI ---
     int words_to_display = 0;
     bool is_mode_code = (sa == 0 || sa == 31);
     
-    // Veri kelimesi olan Mode Code'ları kontrol et (örn: Transmit Data Word)
     bool mc_has_data = (is_mode_code && ((tr == 1 && wc_field == 17) || (tr == 0 && wc_field == 16)));
     
     if (!is_mode_code || mc_has_data) {
         words_to_display = (wc_field == 0) ? 32 : wc_field;
-        if (is_mode_code) words_to_display = 1; // Mode code'lar her zaman 1 veri kelimesi içerir.
+        if (is_mode_code) words_to_display = 1;
     }
 
     if (words_to_display > 0) {
         ss << "Data: ";
         for (int i = 0; i < words_to_display; ++i) {
             if (i < trans.data_words.size()) {
-                // Gerçek veriyi bas
                 snprintf(tempBuf, sizeof(tempBuf), "%04X ", trans.data_words[i]);
                 ss << tempBuf;
             } else {
-                // Yer tutucu bas
                 ss << "0000 ";
             }
             
@@ -204,7 +198,6 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
         }
         ss << "\n";
     }
-    // --- YENİ VERİ BASMA MANTIĞI SONU ---
 
     ss << "----------------------------------------\n";
     outString += ss.str();

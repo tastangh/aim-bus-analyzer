@@ -9,7 +9,6 @@
 #include <atomic>
 #include <mutex>
 
-// UI tarafından BM sınıfına konfigürasyon geçirmek için
 typedef struct ConfigBmUi
 {
   AiUInt32 ulDevice;
@@ -42,7 +41,6 @@ private:
     BM();
     ~BM();
 
-    // Veri işleme için dahili yardımcı yapı ve fonksiyonlar
     struct MessageTransaction {
         uint64_t full_timetag = 0;
         AiUInt32 last_timetag_l_data = 0;
@@ -60,7 +58,6 @@ private:
     
     void formatAndRelayTransaction(const MessageTransaction& trans, std::string& outString);
 
-    // Arka plan iş parçacığı ve API yönetimi
     void monitorThreadFunc();
     void processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead);
     AiReturn initializeBoard(const ConfigBmUi& config);
@@ -69,7 +66,6 @@ private:
     AiReturn openDataQueue();
     void closeDataQueue();
 
-    // Üye değişkenler
     AiUInt32 m_ulModHandle;
     ConfigBmUi m_currentConfig;
 
