@@ -51,60 +51,37 @@ BM::~BM() {
     ApiExit();
 }
 
+// ... initializeBoard'dan monitorThreadFunc'a kadar olan tüm fonksiyonlar değişmedi ...
 AiReturn BM::initializeBoard(const ConfigBmUi& config) {
-    AiReturn ret = API_OK;
-    static bool apiLibraryInitialized = false;
-    if (!apiLibraryInitialized) {
-        ret = ApiInit();
-        if (ret <= 0) return ret < 0 ? (AiReturn)ret : API_ERR_NAK; 
-        apiLibraryInitialized = true;
-    }
-    TY_API_OPEN xApiOpen;
-    memset(&xApiOpen, 0, sizeof(xApiOpen));
-    xApiOpen.ul_Module = config.ulDevice;
-    xApiOpen.ul_Stream = config.ulStream;
-    strcpy(xApiOpen.ac_SrvName, "local"); 
-    ret = ApiOpenEx(&xApiOpen, &m_ulModHandle);
-    if (ret != API_OK) { m_ulModHandle = 0; return ret; }
-    TY_API_RESET_INFO xApiResetInfo;
-    memset(&xApiResetInfo, 0, sizeof(xApiResetInfo));
+    AiReturn ret = API_OK; static bool apiLibraryInitialized = false;
+    if (!apiLibraryInitialized) { ret = ApiInit(); if (ret <= 0) return ret < 0 ? (AiReturn)ret : API_ERR_NAK; apiLibraryInitialized = true; }
+    TY_API_OPEN xApiOpen; memset(&xApiOpen, 0, sizeof(xApiOpen)); xApiOpen.ul_Module = config.ulDevice; xApiOpen.ul_Stream = config.ulStream; strcpy(xApiOpen.ac_SrvName, "local"); 
+    ret = ApiOpenEx(&xApiOpen, &m_ulModHandle); if (ret != API_OK) { m_ulModHandle = 0; return ret; }
+    TY_API_RESET_INFO xApiResetInfo; memset(&xApiResetInfo, 0, sizeof(xApiResetInfo));
     ret = ApiCmdReset(m_ulModHandle, (AiUInt8)config.ulStream, API_RESET_ALL, &xApiResetInfo);
     if (ret != API_OK) { ApiClose(m_ulModHandle); m_ulModHandle = 0; return ret; }
     return API_OK;
 }
-
 void BM::shutdownBoard() { if (m_ulModHandle != 0) { ApiClose(m_ulModHandle); m_ulModHandle = 0; } }
-
 AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
     AiReturn ret = API_OK;
-    ret = ApiCmdCalCplCon(m_ulModHandle, (AiUInt8)config.ulStream, API_CAL_BUS_PRIMARY, config.ulCoupling);
-    AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdCalCplCon Primary", this);
-    ret = ApiCmdCalCplCon(m_ulModHandle, (AiUInt8)config.ulStream, API_CAL_BUS_SECONDARY, config.ulCoupling);
-    AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdCalCplCon Secondary", this);
-    ret = ApiCmdBMIni(m_ulModHandle, (AiUInt8)config.ulStream);
-    AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdBMIni", this);
-    TY_API_BM_CAP_SETUP bmCapSetup;
-    memset(&bmCapSetup, 0, sizeof(bmCapSetup));
-    bmCapSetup.cap_mode = API_BM_CAPMODE_RECORDING; 
-    ret = ApiCmdBMCapMode(m_ulModHandle, (AiUInt8)config.ulStream, &bmCapSetup);
-    AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdBMCapMode", this);
+    ret = ApiCmdCalCplCon(m_ulModHandle, (AiUInt8)config.ulStream, API_CAL_BUS_PRIMARY, config.ulCoupling); AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdCalCplCon Primary", this);
+    ret = ApiCmdCalCplCon(m_ulModHandle, (AiUInt8)config.ulStream, API_CAL_BUS_SECONDARY, config.ulCoupling); AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdCalCplCon Secondary", this);
+    ret = ApiCmdBMIni(m_ulModHandle, (AiUInt8)config.ulStream); AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdBMIni", this);
+    TY_API_BM_CAP_SETUP bmCapSetup; memset(&bmCapSetup, 0, sizeof(bmCapSetup)); bmCapSetup.cap_mode = API_BM_CAPMODE_RECORDING; 
+    ret = ApiCmdBMCapMode(m_ulModHandle, (AiUInt8)config.ulStream, &bmCapSetup); AIM_CHECK_BM_ERROR(ret, "configureBusMonitor/ApiCmdBMCapMode", this);
     return API_OK;
 }
-
 AiReturn BM::openDataQueue() {
     AiReturn ret = API_OK;
     m_dataQueueId = (m_currentConfig.ulStream == 1) ? API_DATA_QUEUE_ID_BM_REC_BIU1 : API_DATA_QUEUE_ID_BM_REC_BIU2;
     AiUInt32 queueSizeOnCard = 0;
-    ret = ApiCmdDataQueueOpen(m_ulModHandle, m_dataQueueId, &queueSizeOnCard); 
-    AIM_CHECK_BM_ERROR(ret, "openDataQueue/ApiCmdDataQueueOpen", this);
+    ret = ApiCmdDataQueueOpen(m_ulModHandle, m_dataQueueId, &queueSizeOnCard); AIM_CHECK_BM_ERROR(ret, "openDataQueue/ApiCmdDataQueueOpen", this);
     if (queueSizeOnCard == 0) return API_ERR_NAK;
-    ret = ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_START);
-    AIM_CHECK_BM_ERROR(ret, "openDataQueue/ApiCmdDataQueueControl START", this);
+    ret = ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_START); AIM_CHECK_BM_ERROR(ret, "openDataQueue/ApiCmdDataQueueControl START", this);
     return API_OK;
 }
-
 void BM::closeDataQueue() { if (m_ulModHandle != 0 && m_dataQueueId != 0) { ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_STOP); ApiCmdDataQueueClose(m_ulModHandle, m_dataQueueId); m_dataQueueId = 0; } }
-
 AiReturn BM::start(const ConfigBmUi& config) {
     if (m_monitoringActive.load()) return API_OK;
     m_currentConfig = config; m_shutdownRequested.store(false);
@@ -116,44 +93,31 @@ AiReturn BM::start(const ConfigBmUi& config) {
     m_monitoringActive.store(true); m_monitorThread = std::thread(&BM::monitorThreadFunc, this);
     return API_OK;
 }
-
 void BM::stop() {
     m_shutdownRequested.store(true); if (m_monitorThread.joinable()) { m_monitorThread.join(); }
     if (m_ulModHandle != 0) { ApiCmdBMHalt(m_ulModHandle, (AiUInt8)m_currentConfig.ulStream); closeDataQueue(); }
     shutdownBoard(); m_monitoringActive.store(false); 
 }
-
 bool BM::isMonitoring() const { return m_monitoringActive.load(); }
 void BM::setUpdateMessagesCallback(UpdateMessagesCallback cb) { m_guiUpdateMessagesCb = cb; }
 void BM::setUpdateTreeItemCallback(UpdateTreeItemCallback cb) { m_guiUpdateTreeItemCb = cb; }
-
 void BM::monitorThreadFunc() {
-    TY_API_DATA_QUEUE_READ queueReadParams;
-    TY_API_DATA_QUEUE_STATUS queueStatus;
-    AiReturn ret;
+    TY_API_DATA_QUEUE_READ queueReadParams; TY_API_DATA_QUEUE_STATUS queueStatus; AiReturn ret;
     while (!m_shutdownRequested.load()) {
         if (m_ulModHandle == 0) break;
         memset(&queueReadParams, 0, sizeof(queueReadParams));
-        queueReadParams.id = m_dataQueueId;
-        queueReadParams.buffer = m_rxDataBuffer.data();
-        queueReadParams.bytes_to_read = RX_BUFFER_CHUNK_SIZE;
+        queueReadParams.id = m_dataQueueId; queueReadParams.buffer = m_rxDataBuffer.data(); queueReadParams.bytes_to_read = RX_BUFFER_CHUNK_SIZE;
         memset(&queueStatus, 0, sizeof(queueStatus));
         ret = ApiCmdDataQueueRead(m_ulModHandle, &queueReadParams, &queueStatus);
-        
-        if (ret == API_ERR_TIMEOUT) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-            continue;
-        }
+        if (ret == API_ERR_TIMEOUT) { std::this_thread::sleep_for(std::chrono::milliseconds(10)); continue; }
         if (ret != API_OK) break;
-        if (queueStatus.bytes_transfered > 0) {
-            processAndRelayData(m_rxDataBuffer.data(), queueStatus.bytes_transfered);
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(20)); 
-        }
+        if (queueStatus.bytes_transfered > 0) { processAndRelayData(m_rxDataBuffer.data(), queueStatus.bytes_transfered); } 
+        else { std::this_thread::sleep_for(std::chrono::milliseconds(20)); }
     }
     m_monitoringActive.store(false); 
 }
 
+// *** DEĞİŞİKLİK BURADA: Veri olmasa bile placeholder basan yeni formatlama mantığı ***
 void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string& outString) {
     if (!trans.cmd1_valid) return;
 
@@ -196,29 +160,52 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
     AiUInt8 rt = (trans.cmd1 >> 11) & 0x1F;
     AiUInt8 tr = (trans.cmd1 >> 10) & 0x01;
     AiUInt8 sa = (trans.cmd1 >> 5) & 0x1F;
-    AiUInt8 wc = trans.cmd1 & 0x1F;
+    AiUInt8 wc_field = trans.cmd1 & 0x1F;
 
     ss << "Bus: " << trans.bus1 << " Type: ";
     if (trans.cmd2_valid) { AiUInt8 rt2 = (trans.cmd2 >> 11) & 0x1F; ss << "RT " << (int)rt << " to RT " << (int)rt2; } 
     else if (tr == 0) { ss << "BC to RT " << (int)rt; } 
     else { ss << "RT " << (int)rt << " to BC"; }
 
-    if (sa == 0 || sa == 31) { snprintf(tempBuf, sizeof(tempBuf), " MC: %d (Op %d)", (int)sa, (int)wc); } 
-    else { snprintf(tempBuf, sizeof(tempBuf), " SA: %d WC: %d", (int)sa, (int)wc); }
+    if (sa == 0 || sa == 31) { snprintf(tempBuf, sizeof(tempBuf), " MC: %d (Op %d)", (int)sa, (int)wc_field); } 
+    else { snprintf(tempBuf, sizeof(tempBuf), " SA: %d WC: %d", (int)sa, (int)wc_field); }
     ss << tempBuf;
 
     if (!trans.stat1_valid) ss << " (No Response)";
     ss << "\n";
 
-    if (!trans.data_words.empty()) {
+    // --- YENİ VERİ BASMA MANTIĞI ---
+    int words_to_display = 0;
+    bool is_mode_code = (sa == 0 || sa == 31);
+    
+    // Veri kelimesi olan Mode Code'ları kontrol et (örn: Transmit Data Word)
+    bool mc_has_data = (is_mode_code && ((tr == 1 && wc_field == 17) || (tr == 0 && wc_field == 16)));
+    
+    if (!is_mode_code || mc_has_data) {
+        words_to_display = (wc_field == 0) ? 32 : wc_field;
+        if (is_mode_code) words_to_display = 1; // Mode code'lar her zaman 1 veri kelimesi içerir.
+    }
+
+    if (words_to_display > 0) {
         ss << "Data: ";
-        for (size_t i = 0; i < trans.data_words.size(); ++i) {
-            snprintf(tempBuf, sizeof(tempBuf), "%04X ", trans.data_words[i]);
-            ss << tempBuf;
-            if ((i + 1) % 16 == 0 && (i + 1) < trans.data_words.size()) { ss << "\n      "; }
+        for (int i = 0; i < words_to_display; ++i) {
+            if (i < trans.data_words.size()) {
+                // Gerçek veriyi bas
+                snprintf(tempBuf, sizeof(tempBuf), "%04X ", trans.data_words[i]);
+                ss << tempBuf;
+            } else {
+                // Yer tutucu bas
+                ss << "0000 ";
+            }
+            
+            if ((i + 1) % 16 == 0 && (i + 1) < words_to_display) {
+                ss << "\n      ";
+            }
         }
         ss << "\n";
     }
+    // --- YENİ VERİ BASMA MANTIĞI SONU ---
+
     ss << "----------------------------------------\n";
     outString += ss.str();
 }
