@@ -42,26 +42,34 @@ private:
     BM();
     ~BM();
 
-    void monitorThreadFunc();
+    // Veri işleme için dahili yardımcı yapı ve fonksiyonlar
+    struct MessageTransaction {
+        uint64_t full_timetag = 0;
+        AiUInt32 last_timetag_l_data = 0;
+        AiUInt32 last_timetag_h_data = 0;
+        AiUInt16 cmd1 = 0; char bus1 = 0; bool cmd1_valid = false;
+        AiUInt16 cmd2 = 0; char bus2 = 0; bool cmd2_valid = false;
+        AiUInt16 stat1 = 0; char stat1_bus = 0; bool stat1_valid = false;
+        AiUInt16 stat2 = 0; char stat2_bus = 0; bool stat2_valid = false;
+        std::vector<AiUInt16> data_words;
+        AiUInt32 error_word = 0; bool error_valid = false;
 
+        void clear();
+        bool isEmpty() const;
+    };
+    
+    void formatAndRelayTransaction(const MessageTransaction& trans, std::string& outString);
+
+    // Arka plan iş parçacığı ve API yönetimi
+    void monitorThreadFunc();
+    void processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead);
     AiReturn initializeBoard(const ConfigBmUi& config);
     void shutdownBoard();
     AiReturn configureBusMonitor(const ConfigBmUi& config);
     AiReturn openDataQueue();
     void closeDataQueue();
 
-    void processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead);
-    bool applyFilterLogic(AiUInt8 type, AiUInt16 busWord); // Filtreleme mantığı için
-
-    // Veri ayrıştırma yardımcı fonksiyonları (string döndüren versiyonlar)
-    void helperParseCommandWord(AiUInt16 cmdWord, std::string& out);
-    void helperParseStatusWord(AiUInt16 statusWord, std::string& out);
-    void helperParseDataWord(AiUInt16 dataWord, std::string& out);
-    void helperParseBusWordEntry(AiUInt32 entryData, AiUInt8 type, std::string& out);
-    void helperParseErrorWordEntry(AiUInt32 entryData, std::string& out);
-    void helperParseTimeTagLowEntry(AiUInt32 entryData, std::string& out);
-    void helperParseTimeTagHighEntry(AiUInt32 entryData, std::string& out);
-
+    // Üye değişkenler
     AiUInt32 m_ulModHandle;
     ConfigBmUi m_currentConfig;
 
@@ -73,9 +81,9 @@ private:
     UpdateTreeItemCallback m_guiUpdateTreeItemCb;
 
     std::atomic<bool> m_filterEnabled;
-    std::atomic<char> m_filterBus; // 'A' veya 'B', ya da 0 (filtre yok)
-    std::atomic<int>  m_filterRt;  // 0-30, ya da -1 (filtre yok)
-    std::atomic<int>  m_filterSa;  // 0-30, ya da -1 (filtre yok)
+    std::atomic<char> m_filterBus;
+    std::atomic<int>  m_filterRt;
+    std::atomic<int>  m_filterSa;
     std::mutex        m_filterMutex;
 
     AiUInt32 m_dataQueueId;

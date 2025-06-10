@@ -4,7 +4,6 @@
 #include <wx/treectrl.h>
 #include <wx/wx.h>
 
-// Enum ID'ler burada veya .cpp içinde olabilir. Başlıkta olması daha yaygın.
 enum {
   ID_ADD_BTN = 1,
   ID_ADD_MENU,
@@ -16,9 +15,7 @@ enum {
   ID_RT_SA_TREE
 };
 
-// mainWindow.cpp içindeki TOP_BAR_COMP_HEIGHT yerine
-const int TOP_BAR_COMP_HEIGHT = 28; // Veya uygun bir değer
-
+const int TOP_BAR_COMP_HEIGHT = 28;
 
 class BusMonitorFrame : public wxFrame {
 public:
@@ -35,6 +32,7 @@ private:
 
   void appendMessagesToUi(const wxString& messages);
   void updateTreeItemVisualState(char bus, int rt, int sa, bool isActive);
+  void resetTreeVisualState();
 
   int m_uiRecentMessageCount;
   wxTextCtrl *m_deviceIdTextInput;
