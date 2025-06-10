@@ -203,9 +203,6 @@ void BusMonitorFrame::updateTreeItemVisualState(char bus, int rt, int sa, bool i
         if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemBold(rtTreeId, true);
         if (busTreeId.IsOk()) m_milStd1553Tree->SetItemBold(busTreeId, true);
         
-        // This line is commented out to prevent the tree from auto-scrolling
-        // and losing user focus during high-speed data flow.
-        // m_milStd1553Tree->EnsureVisible(saTreeId);
     } 
 }
 
