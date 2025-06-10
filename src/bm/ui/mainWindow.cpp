@@ -236,7 +236,7 @@ void BusMonitorFrame::onStartStopClicked(wxCommandEvent &) {
         ConfigBmUi bmConfig;
         bmConfig.ulDevice = static_cast<AiUInt32>(deviceNumLong);
         bmConfig.ulStream = 1; 
-        bmConfig.ulCoupling = API_CPL_TRANSFORMER;
+        bmConfig.ulCoupling = API_CAL_CPL_TRANSFORM;
 
         SetStatusText("Starting monitoring on device " + m_deviceIdTextInput->GetValue() + "...");
         AiReturn bmStartRet = BM::getInstance().start(bmConfig);
