@@ -151,15 +151,15 @@ void BusMonitorFrame::updateTreeItemVisualState(char bus, int rt, int sa, bool i
     wxTreeItemId saTreeId  = model.busList.at(bus_idx).rtList.at(rt).saList.at(sa).getTreeObject();
 
     if (isActive) {
-        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(saTreeId, *wxRED);
-        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(rtTreeId, *wxRED);
-        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemTextColour(busTreeId, *wxRED);
+        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(saTreeId, *wxGREEN);
+        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(rtTreeId, *wxGREEN);
+        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemTextColour(busTreeId, *wxGREEN);
         
         if (saTreeId.IsOk())  m_milStd1553Tree->SetItemBold(saTreeId, true);
         if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemBold(rtTreeId, true);
         if (busTreeId.IsOk()) m_milStd1553Tree->SetItemBold(busTreeId, true);
         
-        m_milStd1553Tree->EnsureVisible(saTreeId);
+        // m_milStd1553Tree->EnsureVisible(saTreeId);
     } 
 }
 

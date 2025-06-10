@@ -198,7 +198,7 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
                 ss << "0000 ";
             }
             
-            if ((i + 1) % 16 == 0 && (i + 1) < words_to_display) {
+            if ((i + 1) % 8 == 0 && (i + 1) < words_to_display) {
                 ss << "\n      ";
             }
         }
