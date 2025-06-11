@@ -4,6 +4,15 @@
 #include <filesystem>
 #include <unistd.h>
 #include <linux/limits.h>
+// --- Sabitler ---
+constexpr int RT_SA_MAX_COUNT = 32;
+constexpr int TOP_BAR_COMP_HEIGHT = 28;
+constexpr int DATA_OCTET = 8;
+const std::string CONFIG_PATH = "config.json";
+
+// --- Enum ---
+// Transfer modlarını tanımlar.
+enum class BcMode { BC_TO_RT, RT_TO_BC, RT_TO_RT };
 
 namespace Common {
 
