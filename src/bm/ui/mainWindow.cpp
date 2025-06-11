@@ -6,10 +6,6 @@
 #include <string>
 #include <wx/arrstr.h> 
 
-namespace Logger { 
-    void error(const std::string& msg) { wxLogError("%s", msg.c_str()); }
-    void info(const std::string& msg) { wxLogMessage("%s", msg.c_str()); }
-}
 
 // Event table for connecting UI events to their handler functions.
 // This is a classic wxWidgets approach for event handling.
@@ -34,7 +30,11 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     // 1. --- UI Component Creation and Layout ---
     // This section follows the standard wxWidgets pattern: create controls,
     // arrange them in sizers, and then set the top-level sizer for the frame.
-
+    // std::cout << "--- PATH DEBUGGING ---" << std::endl;
+    // std::cout << "Executable Dir: " << Common::getExecutableDirectory() << std::endl;
+    // std::cout << "Project Root:   " << Common::getProjectRootDirectory() << std::endl;
+    // std::cout << "Config Path:    " << Common::getConfigPath() << std::endl;
+    // std::cout << "----------------------" << std::endl;
     // --- Menu Bar Setup ---
     auto *menuFile = new wxMenu;
     menuFile->Append(ID_ADD_MENU, "Start / Stop\tCtrl-R", "Start or stop monitoring");
@@ -100,30 +100,45 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     CreateStatusBar();
     SetStatusText("Ready, press Start");
 
-    // 2. --- Configuration Loading ---
-    // Attempts to load initial settings from a JSON config file.
-    // If the file doesn't exist or is malformed, it logs the issue and proceeds with defaults.
-    m_uiRecentMessageCount = 2000; 
-    nlohmann::json configJson;
-    std::ifstream ifs(Common::CONFIG_PATH);
-    if (ifs.is_open()) {
-        try {
-            ifs >> configJson;
-            if (configJson.contains("Bus_Monitor")) {
-                if (configJson["Bus_Monitor"].contains("Default_Device_Number")) {
-                    m_deviceIdTextInput->SetValue(std::to_string(configJson["Bus_Monitor"]["Default_Device_Number"].get<int>()));
+// In src/bm/ui/mainWindow.cpp
+
+        // 2. --- Configuration Loading ---
+        m_uiRecentMessageCount = 2000; // Start with a default
+        int defaultDeviceNum = 0;      // Start with a default
+
+        std::string configPath = Common::getConfigPath();
+        std::ifstream ifs(configPath);
+
+        if (ifs.is_open()) {
+            try {
+                nlohmann::json configJson;
+                ifs >> configJson;
+                Logger::info("Successfully opened and parsed " + configPath);
+
+                // Check for and read Bus Monitor settings
+                if (configJson.contains("Bus_Monitor")) {
+                    const auto& bmConfig = configJson["Bus_Monitor"];
+                    
+                    if (bmConfig.contains("Default_Device_Number")) {
+                        defaultDeviceNum = bmConfig.value("Default_Device_Number", 0);
+                        Logger::info("Loaded Default_Device_Number: " + std::to_string(defaultDeviceNum));
+                    }
+                    
+                    if (bmConfig.contains("UI_Recent_Line_Count")) {
+                        m_uiRecentMessageCount = bmConfig.value("UI_Recent_Line_Count", 2000);
+                        Logger::info("Loaded UI_Recent_Line_Count: " + std::to_string(m_uiRecentMessageCount));
+                    }
                 }
-                if (configJson["Bus_Monitor"].contains("UI_Recent_Line_Count")) {
-                    m_uiRecentMessageCount = configJson["Bus_Monitor"]["UI_Recent_Line_Count"].get<int>();
-                    if (m_uiRecentMessageCount <= 0) m_uiRecentMessageCount = 2000;
-                }
+            } catch (const nlohmann::json::parse_error &e) {
+                Logger::error("JSON parse error in " + configPath + ": " + std::string(e.what()));
             }
-        } catch (const nlohmann::json::parse_error &e) {
-            Logger::error("JSON parse error in " + std::string(Common::CONFIG_PATH) + ": " + std::string(e.what()));
+        } else {
+            Logger::info("Config file not found: " + configPath + ". Using defaults.");
         }
-    } else {
-        Logger::info("Config file not found: " + std::string(Common::CONFIG_PATH) + ". Using defaults.");
-    }
+
+        // Now, apply the loaded (or default) value to the UI text input
+        m_deviceIdTextInput->SetValue(std::to_string(defaultDeviceNum));
+    // ...
     
     // 3. --- Backend Communication Setup ---
     // Sets up callback functions to receive data from the BM backend.

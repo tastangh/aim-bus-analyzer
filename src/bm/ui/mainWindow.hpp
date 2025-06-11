@@ -4,7 +4,7 @@
 #include <wx/treectrl.h>
 #include <wx/wx.h>
 #include "common.hpp"
-
+#include "logger.hpp"
 
 enum {
   ID_ADD_BTN = 1,

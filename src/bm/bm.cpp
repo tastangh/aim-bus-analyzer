@@ -25,7 +25,7 @@
 
 /**
  * @brief Resets the internal state of a MessageTransaction struct.
- *        Called to prepare the struct for assembling the next message from the data stream.
+ *        Called to prepare the struct for assembling the nexta message from the data stream.
  */
 void BM::MessageTransaction::clear() {
     full_timetag = 0; last_timetag_l_data = 0; last_timetag_h_data = 0;
