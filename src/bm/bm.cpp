@@ -71,6 +71,7 @@ BM& BM::getInstance() {
  *        Private to enforce the singleton pattern.
  */
 BM::BM() : m_ulModHandle(0), m_monitoringActive(false), m_shutdownRequested(false),
+           m_dataLoggingEnabled(false), 
            m_guiUpdateMessagesCb(nullptr), m_guiUpdateTreeItemCb(nullptr),
            m_filterEnabled(false), m_filterBus(0), m_filterRt(-1), m_filterSa(-1),
            m_dataQueueId(0)
@@ -392,8 +393,16 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     if (m_guiUpdateMessagesCb && !allMessagesForUi.empty()) {
         m_guiUpdateMessagesCb(allMessagesForUi);
     }
+
+    if (m_dataLoggingEnabled.load()) {
+        Logger::info("\n---\n" + allMessagesForUi);
+    }
 }
 
+// Yeni fonksiyonu ekle
+void BM::enableDataLogging(bool enable) {
+    m_dataLoggingEnabled.store(enable);
+}
 /**
  * @brief Enables or disables message filtering.
  * @param enable True to enable filtering, false to disable.

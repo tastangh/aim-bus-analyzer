@@ -14,7 +14,8 @@ enum {
   ID_FILTER_MENU,
   ID_CLEAR_MENU,
   ID_DEVICE_ID_TXT,
-  ID_RT_SA_TREE
+  ID_RT_SA_TREE,
+  ID_LOG_TO_FILE_CHECKBOX
 };
 
 const int TOP_BAR_COMP_HEIGHT = 28;
@@ -30,6 +31,7 @@ private:
   void onClearClicked(wxCommandEvent &event);
   void onTreeItemClicked(wxTreeEvent &event);
   void onExit(wxCommandEvent &event);
+  void onLogToFileToggled(wxCommandEvent &event); 
   void onCloseFrame(wxCloseEvent& event);
 
   void appendMessagesToUi(const wxString& messages);
@@ -42,6 +44,7 @@ private:
   wxTextCtrl *m_messageList;
   wxButton *m_startStopButton;
   wxButton *m_filterButton;
+  wxCheckBox *m_logToFileCheckBox;
 
   wxDECLARE_EVENT_TABLE();
 };

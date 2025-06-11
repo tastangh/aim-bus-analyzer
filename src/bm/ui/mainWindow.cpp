@@ -18,6 +18,7 @@ wxBEGIN_EVENT_TABLE(BusMonitorFrame, wxFrame)
     EVT_BUTTON(ID_CLEAR_BTN, BusMonitorFrame::onClearClicked)
     EVT_MENU(wxID_EXIT, BusMonitorFrame::onExit)
     EVT_TREE_ITEM_ACTIVATED(ID_RT_SA_TREE, BusMonitorFrame::onTreeItemClicked)
+    EVT_CHECKBOX(ID_LOG_TO_FILE_CHECKBOX, BusMonitorFrame::onLogToFileToggled)
     EVT_CLOSE(BusMonitorFrame::onCloseFrame)
 wxEND_EVENT_TABLE()
 
@@ -54,6 +55,7 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     m_filterButton = new wxButton(this, ID_FILTER_BTN, "No filter set. Click a tree item to filter.", wxDefaultPosition, wxSize(-1, TOP_BAR_COMP_HEIGHT));
     m_filterButton->Enable(false);
     auto *clearButton = new wxButton(this, ID_CLEAR_BTN, "Clear", wxDefaultPosition, wxSize(-1, TOP_BAR_COMP_HEIGHT));
+    m_logToFileCheckBox = new wxCheckBox(this, ID_LOG_TO_FILE_CHECKBOX, "Log to File"); 
 
     // --- Tree View Initialization ---
     // The tree is pre-populated from the MilStd1553 data model.
@@ -85,7 +87,8 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     topHorizontalSizer->Add(deviceIdText, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 5);
     topHorizontalSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topHorizontalSizer->Add(m_startStopButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5); 
+    topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    topHorizontalSizer->Add(m_logToFileCheckBox, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5); 
     topHorizontalSizer->Add(clearButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     auto *bottomHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
     bottomHorizontalSizer->Add(m_milStd1553Tree, 0, wxEXPAND | wxALL, 5); 
@@ -238,6 +241,12 @@ void BusMonitorFrame::onStartStopClicked(wxCommandEvent &) {
             return;
         }
 
+        bool shouldLogData = m_logToFileCheckBox->IsChecked();
+        BM::getInstance().enableDataLogging(shouldLogData);
+        if (shouldLogData) {
+            Logger::info("Monitoring started with data logging ENABLED.");
+        }
+
         resetTreeVisualState();
         m_messageList->Clear();
 
@@ -360,6 +369,19 @@ void BusMonitorFrame::resetTreeVisualState() {
                 }
             }
         }
+    }
+}
+
+
+void BusMonitorFrame::onLogToFileToggled(wxCommandEvent &event) {
+    bool isChecked = event.IsChecked();
+    BM::getInstance().enableDataLogging(isChecked);
+    if (isChecked) {
+        SetStatusText("Data logging to file enabled.");
+        Logger::info("Data logging to file ENABLED by user.");
+    } else {
+        SetStatusText("Data logging to file disabled.");
+        Logger::info("Data logging to file DISABLED by user.");
     }
 }
 

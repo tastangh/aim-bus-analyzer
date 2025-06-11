@@ -8,6 +8,7 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include "logger.hpp"
 
 typedef struct ConfigBmUi
 {
@@ -36,6 +37,7 @@ public:
     void enableFilter(bool enable);
     bool isFilterEnabled() const;
     void setFilterCriteria(char bus, int rt, int sa);
+    void enableDataLogging(bool enable);
 
 private:
     BM();
@@ -72,6 +74,7 @@ private:
     std::thread m_monitorThread;
     std::atomic<bool> m_monitoringActive;
     std::atomic<bool> m_shutdownRequested;
+    std::atomic<bool> m_dataLoggingEnabled; 
 
     UpdateMessagesCallback m_guiUpdateMessagesCb;
     UpdateTreeItemCallback m_guiUpdateTreeItemCb;
