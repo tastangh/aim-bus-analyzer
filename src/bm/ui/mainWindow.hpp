@@ -3,8 +3,9 @@
 #include <mutex>
 #include <wx/treectrl.h>
 #include <wx/wx.h>
+#include "common.hpp"
+#include "logger.hpp"
 
-// Enum ID'ler burada veya .cpp içinde olabilir. Başlıkta olması daha yaygın.
 enum {
   ID_ADD_BTN = 1,
   ID_ADD_MENU,
@@ -13,12 +14,11 @@ enum {
   ID_FILTER_MENU,
   ID_CLEAR_MENU,
   ID_DEVICE_ID_TXT,
-  ID_RT_SA_TREE
+  ID_RT_SA_TREE,
+  ID_LOG_TO_FILE_CHECKBOX
 };
 
-// mainWindow.cpp içindeki TOP_BAR_COMP_HEIGHT yerine
-const int TOP_BAR_COMP_HEIGHT = 28; // Veya uygun bir değer
-
+const int TOP_BAR_COMP_HEIGHT = 28;
 
 class BusMonitorFrame : public wxFrame {
 public:
@@ -31,10 +31,12 @@ private:
   void onClearClicked(wxCommandEvent &event);
   void onTreeItemClicked(wxTreeEvent &event);
   void onExit(wxCommandEvent &event);
+  void onLogToFileToggled(wxCommandEvent &event); 
   void onCloseFrame(wxCloseEvent& event);
 
   void appendMessagesToUi(const wxString& messages);
   void updateTreeItemVisualState(char bus, int rt, int sa, bool isActive);
+  void resetTreeVisualState();
 
   int m_uiRecentMessageCount;
   wxTextCtrl *m_deviceIdTextInput;
@@ -42,6 +44,7 @@ private:
   wxTextCtrl *m_messageList;
   wxButton *m_startStopButton;
   wxButton *m_filterButton;
+  wxCheckBox *m_logToFileCheckBox;
 
   wxDECLARE_EVENT_TABLE();
 };
