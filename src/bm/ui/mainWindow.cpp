@@ -73,7 +73,15 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
                 auto& sa = rt.saList.at(k);
                 sa.setTreeObject(m_milStd1553Tree->AppendItem(rt.getTreeObject(), sa.getName()));
             }
+                        wxTreeItemId mcRoot = m_milStd1553Tree->AppendItem(rt.getTreeObject(), "Mode Codes");
+                        for (const auto& mc_pair : MilStd1553::getModeCodeList()) {
+                            wxString mcLabel = wxString::Format("MC %d: %s", mc_pair.first, mc_pair.second);
+                            wxTreeItemId mcItem = m_milStd1553Tree->AppendItem(mcRoot, mcLabel);
+                            m_treeItemToMcMap[mcItem] = mc_pair.first;
+                        }
+            
         }
+
         if (i == 0) m_milStd1553Tree->Expand(bus.getTreeObject()); 
     }
 
@@ -347,40 +355,67 @@ void BusMonitorFrame::onTreeItemClicked(wxTreeEvent &event) {
     char filterBusChar = 0;
     int filterRt = -1;
     int filterSa = -1;
+    int filterMc = -1;
     bool found = false;
     auto& model = MilStd1553::getInstance();
-    
-    // This series of nested loops iterates through our data model to find which
-    // item corresponds to the clicked wxTreeItemId. This is more robust than
-    // parsing the item's text label.
-    for (int i = 0; i < BUS_COUNT && !found; ++i) {
-        auto& bus = model.busList.at(i);
-        if (bus.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; found = true; break; }
-        for (int j = 0; j < RT_COUNT && !found; ++j) {
-            auto& rt = bus.rtList.at(j);
-            if (rt.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; found = true; break; }
-            for (int k = 0; k < SA_COUNT && !found; ++k) {
-                auto& sa = rt.saList.at(k);
-                if (sa.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; filterSa = k; found = true; break; }
+    // 1. Tıklanan öğenin bir Mode Code olup olmadığını kontrol et
+    auto it = m_treeItemToMcMap.find(clickedId);
+    if (it != m_treeItemToMcMap.end()) {
+        filterMc = it->second; // MC numarasını al
+        // Parent'larına giderek RT ve Bus bilgilerini bul
+        wxTreeItemId rtId = m_milStd1553Tree->GetItemParent(m_milStd1553Tree->GetItemParent(clickedId));
+        wxTreeItemId busId = m_milStd1553Tree->GetItemParent(rtId);
+
+        for(int i = 0; i < BUS_COUNT; ++i) {
+            if (model.busList.at(i).getTreeObject() == busId) {
+                filterBusChar = (i == 0) ? 'A' : 'B';
+                for (int j = 0; j < RT_COUNT; ++j) {
+                    if (model.busList.at(i).rtList.at(j).getTreeObject() == rtId) {
+                        filterRt = j;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+        }
+    } else {
+        // 2. Eğer Mode Code değilse, eski Bus/RT/SA arama mantığını kullan
+        for (int i = 0; i < BUS_COUNT && !found; ++i) {
+            auto& bus = model.busList.at(i);
+            if (bus.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; found = true; break; }
+            for (int j = 0; j < bus.rtList.size() && !found; ++j) {
+                auto& rt = bus.rtList.at(j);
+                if (rt.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; found = true; break; }
+                for (int k = 0; k < rt.saList.size() && !found; ++k) {
+                    auto& sa = rt.saList.at(k);
+                    if (sa.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; filterSa = k; found = true; break; }
+                }
             }
         }
     }
 
     if (found) {
-        BM::getInstance().setFilterCriteria(filterBusChar, filterRt, filterSa);
+        // Backend'i yeni kriterlerle ayarla
+        BM::getInstance().setFilterCriteria(filterBusChar, filterRt, filterSa, filterMc);
         BM::getInstance().enableFilter(true);
+
+        // UI'daki filtre etiketini güncelle
         wxString filterLabel = "Filtering by: ";
         if(filterBusChar != 0) filterLabel += wxString::Format("Bus %c", filterBusChar);
         if(filterRt != -1) filterLabel += wxString::Format(", RT %d", filterRt);
         if(filterSa != -1) filterLabel += wxString::Format(", SA %d", filterSa);
+        if(filterMc != -1) filterLabel += wxString::Format(", MC %d", filterMc);
+
         m_filterButton->SetLabelText(filterLabel);
         m_filterButton->Enable(true);
         resetTreeVisualState();
-        m_milStd1553Tree->SetItemBold(clickedId, true); // Visually indicate the filter target
+        m_milStd1553Tree->SetItemBold(clickedId, true);
         m_milStd1553Tree->EnsureVisible(clickedId);
         SetStatusText(filterLabel);
     }
 }
+
 
 /**
  * @brief Resets the visual state of all items in the tree control to default.

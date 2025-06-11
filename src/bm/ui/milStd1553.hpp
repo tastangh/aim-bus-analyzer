@@ -42,6 +42,27 @@ public:
     return instance;
   }
 
+    /**
+    * @brief Provides a static list of common MIL-STD-1553 Mode Codes with their descriptions.
+    * @return A constant reference to a vector of (code, description) pairs.
+    */
+    static const std::vector<std::pair<int, std::string>>& getModeCodeList() {
+      static const std::vector<std::pair<int, std::string>> modeCodes = {
+          {0, "Dynamic Bus Control"},
+          {1, "Synchronize"},
+          {2, "Transmit Status Word"},
+          {3, "Initiate Self-Test"},
+          {4, "Transmitter Shutdown"},
+          {5, "Override Transmitter Shutdown"},
+          {8, "Reset Remote Terminal"},
+          {16, "Transmit Vector Word"},
+          {17, "Synchronize (with data)"},
+          {18, "Transmit Last Command"},
+          {19, "Transmit BIT Word"}
+      };
+      return modeCodes;
+  }
+
   std::array<Bus, BUS_COUNT> busList;
 
 private:

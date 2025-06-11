@@ -74,6 +74,7 @@ BM::BM() : m_ulModHandle(0), m_monitoringActive(false), m_shutdownRequested(fals
            m_dataLoggingEnabled(false), 
            m_guiUpdateMessagesCb(nullptr), m_guiUpdateTreeItemCb(nullptr),
            m_filterEnabled(false), m_filterBus(0), m_filterRt(-1), m_filterSa(-1),
+           m_filterMc(-1),
            m_dataQueueId(0)
 {
     m_rxDataBuffer.resize(RX_BUFFER_CHUNK_SIZE);
@@ -234,12 +235,21 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
             char bus_to_check = toupper(m_filterBus.load());
             int rt_to_check = m_filterRt.load();
             int sa_to_check = m_filterSa.load();
+            int mc_to_check = m_filterMc.load();
+
             if (bus_to_check != 0 && toupper(trans.bus1) != bus_to_check) passed = false;
             if (passed && rt_to_check != -1 && rt_to_check != ((trans.cmd1 >> 11) & 0x1F)) passed = false;
-            if (passed && sa_to_check != -1) {
-                AiUInt8 sa_mc = (trans.cmd1 >> 5) & 0x1F;
-                if (sa_mc == 0 || sa_mc == 31 || sa_to_check != sa_mc) passed = false;
+
+            AiUInt8 sa_or_mc = (trans.cmd1 >> 5) & 0x1F;
+            bool is_mode_code = (sa_or_mc == 0 || sa_or_mc == 31);
+
+            if (passed && sa_to_check != -1) { // Eğer SA filtresi varsa
+                if (is_mode_code || sa_or_mc != sa_to_check) passed = false;
+            } else if (passed && mc_to_check != -1) { // Eğer MC filtresi varsa
+                AiUInt8 wc_field = trans.cmd1 & 0x1F;
+                if (!is_mode_code || wc_field != mc_to_check) passed = false;
             }
+            
             if (!passed) return;
         }
     } 
@@ -424,4 +434,10 @@ bool BM::isFilterEnabled() const { return m_filterEnabled.load(); }
  * @param rt The remote terminal address to filter (0-30).
  * @param sa The subaddress to filter (0-30).
  */
-void BM::setFilterCriteria(char bus, int rt, int sa) { std::lock_guard<std::mutex> lock(m_filterMutex); m_filterBus.store(bus); m_filterRt.store(rt); m_filterSa.store(sa); }
+ void BM::setFilterCriteria(char bus, int rt, int sa, int mc) {
+    std::lock_guard<std::mutex> lock(m_filterMutex);
+    m_filterBus.store(bus);
+    m_filterRt.store(rt);
+    m_filterSa.store(sa);
+    m_filterMc.store(mc); 
+}
