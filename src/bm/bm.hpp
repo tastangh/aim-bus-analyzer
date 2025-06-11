@@ -36,7 +36,7 @@ public:
 
     void enableFilter(bool enable);
     bool isFilterEnabled() const;
-    void setFilterCriteria(char bus, int rt, int sa);
+    void setFilterCriteria(char bus, int rt, int sa, int mc = -1);
     void enableDataLogging(bool enable);
 
 private:
@@ -83,6 +83,7 @@ private:
     std::atomic<char> m_filterBus;
     std::atomic<int>  m_filterRt;
     std::atomic<int>  m_filterSa;
+    std::atomic<int>  m_filterMc;
     std::mutex        m_filterMutex;
 
     AiUInt32 m_dataQueueId;

@@ -5,6 +5,7 @@
 #include <wx/wx.h>
 #include "common.hpp"
 #include "logger.hpp"
+#include <map>
 
 enum {
   ID_ADD_BTN = 1,
@@ -45,6 +46,8 @@ private:
   wxButton *m_startStopButton;
   wxButton *m_filterButton;
   wxCheckBox *m_logToFileCheckBox;
+  std::map<wxTreeItemId, int> m_treeItemToMcMap; 
+
 
   wxDECLARE_EVENT_TABLE();
 };
