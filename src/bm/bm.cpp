@@ -399,7 +399,9 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     }
 }
 
-// Yeni fonksiyonu ekle
+/**
+ * @brief Sets the state for enabling or disabling data logging to a file.
+ */
 void BM::enableDataLogging(bool enable) {
     m_dataLoggingEnabled.store(enable);
 }

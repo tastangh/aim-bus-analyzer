@@ -147,6 +147,14 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     // Sets up callback functions to receive data from the BM backend.
     // CRITICAL: Uses wxTheApp->CallAfter to safely marshal calls from the BM's
     // worker thread to the main UI thread, preventing race conditions and crashes.
+
+    /**
+    * @brief Callback to receive formatted message strings from the backend.
+    * 
+    * This lambda is passed to the BM singleton. When the backend has new data,
+    * it invokes this callback. The call is marshaled to the main UI thread
+    * via wxTheApp->CallAfter to safely update the message list.
+    */
     BM::getInstance().setUpdateMessagesCallback(
         [this](const std::string& messages) {
             wxTheApp->CallAfter([this, messages] {
@@ -154,7 +162,37 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
             });
         }
     );
+// In BusMonitorFrame::BusMonitorFrame()
 
+// ...
+
+// 3. --- Backend Communication Setup ---
+// Sets up callback functions to receive data from the BM backend.
+// CRITICAL: Uses wxTheApp->CallAfter to safely marshal calls from the BM's
+// worker thread to the main UI thread, preventing race conditions and crashes.
+
+/**
+ * @brief Callback to receive formatted message strings from the backend.
+ * 
+ * This lambda is passed to the BM singleton. When the backend has new data,
+ * it invokes this callback. The call is marshaled to the main UI thread
+ * via wxTheApp->CallAfter to safely update the message list.
+ */
+ BM::getInstance().setUpdateMessagesCallback(
+    [this](const std::string& messages) {
+        wxTheApp->CallAfter([this, messages] {
+            appendMessagesToUi(wxString::FromUTF8(messages.c_str()));
+        });
+    }
+);
+
+    /**
+    * @brief Callback to receive active terminal information for visual updates.
+    * 
+    * This lambda is invoked by the backend whenever a new terminal becomes active.
+    * It passes the bus/RT/SA coordinates, which are then used to highlight the
+    * corresponding item in the UI's tree view, again safely via wxTheApp->CallAfter.
+    */
     BM::getInstance().setUpdateTreeItemCallback(
         [this](char bus, int rt, int sa, bool isActive) {
             wxTheApp->CallAfter([this, bus, rt, sa, isActive] {
@@ -372,7 +410,9 @@ void BusMonitorFrame::resetTreeVisualState() {
     }
 }
 
-
+/**
+ * @brief Enables or disables logging of bus data to a file based on checkbox state.
+ */
 void BusMonitorFrame::onLogToFileToggled(wxCommandEvent &event) {
     bool isChecked = event.IsChecked();
     BM::getInstance().enableDataLogging(isChecked);
