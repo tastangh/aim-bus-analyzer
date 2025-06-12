@@ -86,9 +86,11 @@ void FrameComponent::sendFrame() {
   }
 
   m_mainWindow->setStatusText("Sending: " + m_config.label);
-  std::array<AiUInt16, BC_MAX_DATA_WORDS> received_data;
   
-  AiReturn status = BC::getInstance().sendFrame(m_config, received_data);
+  // DÜZELTME: BC::sendFrame çağrısı sendAcyclicFrame olarak değiştirildi.
+  // RT->BC veya RT->RT durumlarında alınan veriyi tutmak için bir buffer oluşturuldu.
+  std::array<AiUInt16, BC_MAX_DATA_WORDS> received_data;
+  AiReturn status = BC::getInstance().sendAcyclicFrame(m_config, received_data);
 
   if (status != API_OK) {
     std::string errMsg = "Error sending frame (" + m_config.label + "): " + BC::getInstance().getAIMError(status);
