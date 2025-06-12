@@ -1,232 +1,264 @@
 #include "mainWindow.hpp"
-#include <fstream>
-#include <nlohmann/json.hpp>
-#include <string>
-#include <utility>
-#include <wx/wx.h>
-#include "common.hpp"
+#include "../bc.hpp"
 #include "createFrameWindow.hpp"
 #include "frameComponent.hpp"
 #include "logger.hpp"
-#include "bc.hpp" // Backend sınıfı
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <string>
+#include <utility>
+#include <wx/wx.h>
+#include <wx/thread.h> // wxSemaphore için gerekli
 
-constexpr int MAX_FILE_PATH_SIZE = 1024;
+// --- Constructor ve diğer fonksiyonlar önceki gibi ---
 
-BusControllerFrame::BusControllerFrame() : wxFrame(nullptr, wxID_ANY, "AIM MIL-STD-1553 Bus Controller") {
-    // --- Logger ve Backend'i Başlatma ---
-    Logger::info("Bus Controller UI starting up.");
-    
-    // --- Menü ve Arayüz Elemanları ---
-    auto *menuFile = new wxMenu;
-    int addFrameId = wxNewId();
-    menuFile->Append(addFrameId, "Add Frame\tCtrl-A", "Add a frame to the frame list");
-    int clearFramesId = wxNewId();
-    menuFile->Append(clearFramesId, "Clear All Frames\tCtrl-W", "Clear all frames from the frame list");
-    int loadFramesId = wxNewId();
-    menuFile->Append(loadFramesId, "Load frames\tCtrl-L", "Load frames from a file");
-    int saveFramesId = wxNewId();
-    menuFile->Append(saveFramesId, "Save frames\tCtrl-S", "Save frame into a file");
-    menuFile->AppendSeparator();
-    menuFile->Append(wxID_EXIT);
+BusControllerFrame::BusControllerFrame()
+    : wxFrame(nullptr, wxID_ANY, "AIM MIL-STD-1553 Bus Controller") {
+  
+  Logger::info("Bus Controller UI starting up.");
 
-    auto *menuBar = new wxMenuBar;
-    menuBar->Append(menuFile, "&Commands");
-    SetMenuBar(menuBar);
+  auto *menuFile = new wxMenu;
+  menuFile->Append(wxID_ADD, "Add Frame\tCtrl-A");
+  menuFile->Append(wxID_CLEAR, "Clear All Frames\tCtrl-W");
+  menuFile->AppendSeparator();
+  menuFile->Append(wxID_OPEN, "Load Frames...\tCtrl-L");
+  menuFile->Append(wxID_SAVE, "Save Frames As...\tCtrl-S");
+  menuFile->AppendSeparator();
+  menuFile->Append(wxID_EXIT);
 
-    auto *deviceIdLabel = new wxStaticText(this, wxID_ANY, "AIM Device ID");
-    m_deviceIdTextInput = new wxTextCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(40, TOP_BAR_COMP_HEIGHT));
-    m_repeatToggle = new wxToggleButton(this, wxID_ANY, "Repeat Off", wxDefaultPosition, wxSize(100, TOP_BAR_COMP_HEIGHT));
-    m_sendActiveFramesToggle = new wxToggleButton(this, wxID_ANY, "Send Active Frames", wxDefaultPosition, wxSize(170, TOP_BAR_COMP_HEIGHT));
-    m_sendActiveFramesToggle->SetBackgroundColour(wxColour("#00ccff"));
-    m_addButton = new wxButton(this, wxID_ANY, "Add Frame", wxDefaultPosition, wxSize(100, TOP_BAR_COMP_HEIGHT));
-    m_addButton->SetBackgroundColour(wxColour("#ffcc00"));
+  auto *menuBar = new wxMenuBar;
+  menuBar->Append(menuFile, "&File");
+  SetMenuBar(menuBar);
 
-    // --- Sizer Kurulumu ---
-    auto *verticalSizer = new wxBoxSizer(wxVERTICAL);
-    auto *topHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
-    m_scrolledWindow = new wxScrolledWindow(this, wxID_ANY);
-    m_scrolledWindow->SetBackgroundColour(this->GetBackgroundColour());
-    m_scrolledSizer = new wxBoxSizer(wxVERTICAL);
-    m_scrolledWindow->SetSizer(m_scrolledSizer);
-    m_scrolledWindow->SetScrollRate(10, 10);
+  auto *topPanel = new wxPanel(this);
+  auto *topHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
+  
+  auto *deviceIdLabel = new wxStaticText(topPanel, wxID_ANY, "AIM Device ID:");
+  m_deviceIdTextInput = new wxTextCtrl(topPanel, wxID_ANY, "0", wxDefaultPosition, wxSize(40, TOP_BAR_COMP_HEIGHT));
+  m_repeatToggle = new wxToggleButton(topPanel, wxID_ANY, "Repeat Off", wxDefaultPosition, wxSize(100, TOP_BAR_COMP_HEIGHT));
+  m_sendActiveFramesToggle = new wxToggleButton(topPanel, wxID_ANY, "Send Active Frames", wxDefaultPosition, wxSize(170, TOP_BAR_COMP_HEIGHT));
+  auto *addButton = new wxButton(topPanel, wxID_ADD, "Add Frame");
 
-    topHorizontalSizer->Add(deviceIdLabel, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->AddStretchSpacer();
-    topHorizontalSizer->Add(m_repeatToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_sendActiveFramesToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_addButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+  topHorizontalSizer->Add(deviceIdLabel, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+  topHorizontalSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+  topHorizontalSizer->AddStretchSpacer();
+  topHorizontalSizer->Add(m_repeatToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+  topHorizontalSizer->Add(m_sendActiveFramesToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+  topHorizontalSizer->Add(addButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+  topPanel->SetSizer(topHorizontalSizer);
 
-    verticalSizer->Add(topHorizontalSizer, 0, wxEXPAND | wxALL, 5);
-    verticalSizer->Add(m_scrolledWindow, 1, wxEXPAND | wxALL, 5);
-    SetSizer(verticalSizer);
+  m_scrolledWindow = new wxScrolledWindow(this, wxID_ANY);
+  m_scrolledSizer = new wxBoxSizer(wxVERTICAL);
+  m_scrolledWindow->SetSizer(m_scrolledSizer);
+  m_scrolledWindow->SetScrollRate(0, 10);
 
-    // --- Olayları Bağlama (Binding) ---
-    Bind(wxEVT_MENU, &BusControllerFrame::onAddFrameClicked, this, addFrameId);
-    Bind(wxEVT_MENU, &BusControllerFrame::onClearFramesClicked, this, clearFramesId);
-    Bind(wxEVT_MENU, &BusControllerFrame::onLoadFrames, this, loadFramesId);
-    Bind(wxEVT_MENU, &BusControllerFrame::onSaveFrames, this, saveFramesId);
-    Bind(wxEVT_MENU, &BusControllerFrame::onExit, this, wxID_EXIT);
-    Bind(wxEVT_CLOSE_WINDOW, &BusControllerFrame::onCloseFrame, this);
+  auto *mainSizer = new wxBoxSizer(wxVERTICAL);
+  mainSizer->Add(topPanel, 0, wxEXPAND | wxALL, 5);
+  mainSizer->Add(m_scrolledWindow, 1, wxEXPAND | wxALL, 5);
+  SetSizer(mainSizer);
 
-    m_addButton->Bind(wxEVT_BUTTON, &BusControllerFrame::onAddFrameClicked, this);
-    m_repeatToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerFrame::onRepeatToggle, this);
-    m_sendActiveFramesToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerFrame::onSendActiveFrames, this);
+  Bind(wxEVT_MENU, &BusControllerFrame::onAddFrameClicked, this, wxID_ADD);
+  Bind(wxEVT_MENU, &BusControllerFrame::onClearFramesClicked, this, wxID_CLEAR);
+  Bind(wxEVT_MENU, &BusControllerFrame::onLoadFrames, this, wxID_OPEN);
+  Bind(wxEVT_MENU, &BusControllerFrame::onSaveFrames, this, wxID_SAVE);
+  Bind(wxEVT_MENU, &BusControllerFrame::onExit, this, wxID_EXIT);
+  Bind(wxEVT_CLOSE_WINDOW, &BusControllerFrame::onCloseFrame, this);
+  addButton->Bind(wxEVT_BUTTON, &BusControllerFrame::onAddFrameClicked, this);
+  m_repeatToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerFrame::onRepeatToggle, this);
+  m_sendActiveFramesToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerFrame::onSendActiveFramesToggle, this);
 
-    // --- Son Ayarlar ve Konfigürasyon Yükleme ---
-    nlohmann::json config;
-    std::ifstream configFile(CONFIG_PATH);
-    if (configFile.is_open()) {
-        try {
-            configFile >> config;
-            if (config.contains("Bus_Controller") && config["Bus_Controller"].contains("Default_Device_Number")) {
-                m_deviceIdTextInput->SetValue(std::to_string(config["Bus_Controller"]["Default_Device_Number"].get<int>()));
-            }
-        } catch (const nlohmann::json::parse_error &e) {
-            Logger::error("JSON parse error: " + std::string(e.what()));
-        }
-    }
-    
-    CreateStatusBar();
-    SetStatusText("Ready. Please add frames.");
-    SetMinSize(wxSize(700, 500));
-    Centre();
+  CreateStatusBar();
+  setStatusText("Ready. Please add or load frames.");
+  SetMinSize(wxSize(750, 500));
+  Centre();
 }
 
 BusControllerFrame::~BusControllerFrame() {
-    stopSending(); // Thread'i güvenli bir şekilde durdur
-    BC::getInstance().shutdown(); // Backend'i kapat
+  stopSendingThread();
+  BC::getInstance().shutdown();
 }
 
-void BusControllerFrame::onAddFrameClicked(wxCommandEvent & /*event*/) {
+void BusControllerFrame::onAddFrameClicked(wxCommandEvent &) {
   auto *frame = new FrameCreationFrame(this);
   frame->Show(true);
 }
 
-void BusControllerFrame::onClearFramesClicked(wxCommandEvent & /*event*/) { 
-    m_scrolledSizer->Clear(true); 
-    updateList();
+void BusControllerFrame::onClearFramesClicked(wxCommandEvent &) {
+  m_scrolledSizer->Clear(true);
+  updateListLayout();
+  setStatusText("All frames cleared.");
 }
 
-void BusControllerFrame::onRepeatToggle(wxCommandEvent & /*event*/) {
-  if (m_repeatToggle->GetValue()) {
-    m_repeatToggle->SetLabel("Repeat On");
-  } else {
-    m_repeatToggle->SetLabel("Repeat Off");
-    if (m_isSending) stopSending();
-  }
+void BusControllerFrame::onRepeatToggle(wxCommandEvent &) {
+    m_repeatToggle->SetLabel(m_repeatToggle->GetValue() ? "Repeat On" : "Repeat Off");
 }
 
-void BusControllerFrame::onSendActiveFrames(wxCommandEvent & /*event*/) {
+void BusControllerFrame::onSendActiveFramesToggle(wxCommandEvent &) {
   if (m_sendActiveFramesToggle->GetValue()) {
-    if (BC::getInstance().initialize(getDeviceId()) != API_OK) {
-        wxMessageBox("Failed to initialize AIM device. Check device ID and connection.", "Error", wxOK | wxICON_ERROR, this);
+    if (!BC::getInstance().isInitialized()) {
+      AiReturn ret = BC::getInstance().initialize(getDeviceId());
+      if (ret != API_OK) {
+        wxMessageBox("Failed to initialize AIM device: " + wxString(BC::getInstance().getAIMError(ret)), "Error", wxOK | wxICON_ERROR, this);
         m_sendActiveFramesToggle->SetValue(false);
         return;
+      }
     }
     m_sendActiveFramesToggle->SetLabel("Sending...");
-    m_sendActiveFramesToggle->SetBackgroundColour(wxColour("#ff4545"));
+    m_sendActiveFramesToggle->SetBackgroundColour(wxColour(220, 20, 60));
     m_sendActiveFramesToggle->SetForegroundColour(*wxWHITE);
-    if (m_repeatToggle->GetValue()) {
-      startSendingThread();
-    } else {
-      sendActiveFrames();
-      stopSending(); 
-    }
+    startSendingThread();
   } else {
-    stopSending();
+    stopSendingThread();
   }
-}
-
-void BusControllerFrame::stopSending() {
-  m_isSending = false;
-  if (m_repeatedSendThread.joinable()) {
-    m_repeatedSendThread.join();
-  }
-  m_sendActiveFramesToggle->SetValue(false);
-  m_sendActiveFramesToggle->SetLabel("Send Active Frames");
-  m_sendActiveFramesToggle->SetBackgroundColour(wxColour("#00ccff"));
-  m_sendActiveFramesToggle->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
 }
 
 void BusControllerFrame::startSendingThread() {
   if (m_isSending) return;
   m_isSending = true;
-  m_repeatedSendThread = std::thread([this] {
-      while (m_isSending) {
-          sendActiveFrames();
-          // Tekrarlı gönderimler arasında kısa bir bekleme
-          std::this_thread::sleep_for(std::chrono::milliseconds(50));
-      }
+  m_sendThread = std::thread(&BusControllerFrame::sendActiveFramesLoop, this);
+}
+
+void BusControllerFrame::stopSendingThread() {
+  if (!m_isSending) return;
+  m_isSending = false;
+  if (m_sendThread.joinable()) {
+    m_sendThread.join();
+  }
+  wxTheApp->CallAfter([this] {
+    m_sendActiveFramesToggle->SetValue(false);
+    m_sendActiveFramesToggle->SetLabel("Send Active Frames");
+    m_sendActiveFramesToggle->SetBackgroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_BTNFACE));
+    m_sendActiveFramesToggle->SetForegroundColour(wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT));
+    setStatusText("Sending stopped.");
   });
 }
 
-void BusControllerFrame::sendActiveFrames() {
-  wxTheApp->CallAfter([this] {
-    for (auto &child : m_scrolledSizer->GetChildren()) {
-        if (!m_isSending) break; // Döngü sırasında durdurulursa çık
-        auto *frame = dynamic_cast<FrameComponent *>(child->GetWindow());
-        if (frame != nullptr && frame->isActive()) {
-            frame->sendFrame();
-            // Frameler arası minimum bekleme süresi
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+void BusControllerFrame::sendActiveFramesLoop() {
+  std::vector<FrameComponent*> frameComponents;
+  wxSemaphore sem(0, 1); // Başlangıç değeri 0, maksimum 1
+
+  wxTheApp->CallAfter([&]{
+    frameComponents.clear();
+    for (auto *sizerItem : m_scrolledSizer->GetChildren()) {
+        auto *frame = dynamic_cast<FrameComponent *>(sizerItem->GetWindow());
+        if (frame) {
+            frameComponents.push_back(frame);
         }
     }
+    sem.Post(); // Sinyali ver: "Liste hazır"
   });
-}
 
-void BusControllerFrame::onLoadFrames(wxCommandEvent & /*event*/) {
-    // Bu fonksiyonun içeriği değişmeden kalabilir.
-}
+  sem.Wait(); // Sinyalin gelmesini bekle
 
-void BusControllerFrame::onSaveFrames(wxCommandEvent & /*event*/) {
-    // Bu fonksiyonun içeriği değişmeden kalabilir.
-}
+  if (frameComponents.empty() && m_isSending) {
+    wxTheApp->CallAfter([this] { setStatusText("No frames to send. Stopping."); });
+    m_isSending = false;
+  }
 
-void BusControllerFrame::onExit(wxCommandEvent & /*event*/) {
-  Close(true);
-}
+  do {
+    bool anyActiveSent = false;
+    for (FrameComponent* frame : frameComponents) {
+      if (!m_isSending) break;
+      if (frame->isActive()) {
+        anyActiveSent = true;
+        frame->sendFrame();
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+      }
+    }
+    if (!anyActiveSent && m_isSending) {
+        wxTheApp->CallAfter([this] { setStatusText("No active frames to send. Stopping."); });
+        break;
+    }
+    if (m_isSending && m_repeatToggle->GetValue()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(BC_FRAME_TIME_MS));
+    }
+  } while (m_isSending && m_repeatToggle->GetValue());
 
-void BusControllerFrame::onCloseFrame(wxCloseEvent& event) {
-    stopSending();
-    BC::getInstance().shutdown();
-    Destroy();
-}
-
-// ... Diğer yardımcı fonksiyonlar (moveUp, moveDown, vs.) değişmeden kalır.
-void BusControllerFrame::addFrameToList(const std::string &label, char bus, int rt, int rt2, int sa, int sa2, int wc,
-                                        BcMode mode, std::array<std::string, RT_SA_MAX_COUNT> data) {
-  auto *component = new FrameComponent(m_scrolledWindow, label, bus, rt, rt2, sa, sa2, wc, mode, std::move(data));
-  m_scrolledSizer->Add(component, 0, wxEXPAND | wxALL, 5);
-  updateList();
-}
-void BusControllerFrame::setStatusText(const wxString &status) { SetStatusText(status); }
-int BusControllerFrame::getDeviceId() { return wxAtoi(m_deviceIdTextInput->GetValue()); }
-void BusControllerFrame::moveUp(FrameComponent *item) {
-  int index = getFrameIndex(item);
-  if (index > 0) {
-    m_scrolledSizer->Detach(item);
-    m_scrolledSizer->Insert(index - 1, item, 0, wxEXPAND | wxALL, 5);
-    updateList();
+  if (m_isSending) {
+    stopSendingThread();
   }
 }
-void BusControllerFrame::moveDown(FrameComponent *item) {
-    int index = getFrameIndex(item);
-    if (index != -1 && index < (int)m_scrolledSizer->GetItemCount() - 1) {
-        m_scrolledSizer->Detach(item);
-        m_scrolledSizer->Insert(index + 1, item, 0, wxEXPAND | wxALL, 5);
-        updateList();
+
+void BusControllerFrame::onLoadFrames(wxCommandEvent &) {
+    wxFileDialog openFileDialog(this, _("Open Frames JSON file"), "", "", "JSON files (*.json)|*.json", wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+    if (openFileDialog.ShowModal() == wxID_CANCEL) return;
+    std::ifstream ifs(openFileDialog.GetPath().ToStdString());
+    if (!ifs.is_open()) { wxMessageBox("Could not open file for reading.", "Error", wxOK | wxICON_ERROR); return; }
+    try {
+        nlohmann::json j;
+        ifs >> j;
+        m_scrolledSizer->Clear(true);
+        for (const auto& item : j["frames"]) {
+            std::array<std::string, BC_MAX_DATA_WORDS> data;
+            if (item.contains("data")) {
+                std::vector<std::string> vec_data = item["data"].get<std::vector<std::string>>();
+                std::copy_n(vec_data.begin(), std::min(vec_data.size(), data.size()), data.begin());
+            }
+            FrameConfig config = {
+                item.value("label", "Untitled"), item.value("bus", "A")[0],
+                item.value("rt", 0), item.value("sa", 0),
+                item.value("rt2", 0), item.value("sa2", 0),
+                item.value("wc", 0), item.value("mode", BcMode::BC_TO_RT), data
+            };
+            addFrameToList(config);
+        }
+        setStatusText("Frames loaded from " + openFileDialog.GetFilename());
+    } catch (const nlohmann::json::exception& e) {
+        wxMessageBox("Error parsing JSON file: " + std::string(e.what()), "JSON Error", wxOK | wxICON_ERROR);
     }
 }
-void BusControllerFrame::updateList() {
-    m_scrolledWindow->FitInside();
-    m_scrolledSizer->Layout();
-}
-int BusControllerFrame::getFrameIndex(FrameComponent *frame) {
-    for (size_t i = 0; i < m_scrolledSizer->GetItemCount(); ++i) {
-        if (m_scrolledSizer->GetItem(i)->GetWindow() == frame) {
-            return i;
+
+void BusControllerFrame::onSaveFrames(wxCommandEvent &) {
+    wxFileDialog saveFileDialog(this, _("Save Frames JSON file"), "", "", "JSON files (*.json)|*.json", wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+    if (saveFileDialog.ShowModal() == wxID_CANCEL) return;
+    nlohmann::json j;
+    nlohmann::json framesArray = nlohmann::json::array();
+    for (const auto& child : m_scrolledSizer->GetChildren()) {
+        auto* frame = dynamic_cast<FrameComponent*>(child->GetWindow());
+        if (frame) {
+            const FrameConfig& config = frame->getFrameConfig();
+            nlohmann::json frameJson;
+            frameJson["label"] = config.label; frameJson["bus"] = std::string(1, config.bus); frameJson["mode"] = config.mode;
+            frameJson["rt"] = config.rt; frameJson["sa"] = config.sa; frameJson["rt2"] = config.rt2; frameJson["sa2"] = config.sa2; frameJson["wc"] = config.wc;
+            std::vector<std::string> data_vec(config.data.begin(), config.data.end());
+            frameJson["data"] = data_vec;
+            framesArray.push_back(frameJson);
         }
     }
-    return -1;
+    j["frames"] = framesArray;
+    std::ofstream ofs(saveFileDialog.GetPath().ToStdString());
+    if (ofs.is_open()) {
+        ofs << j.dump(4);
+        setStatusText("Frames saved to " + saveFileDialog.GetFilename());
+    } else {
+        wxMessageBox("Could not open file for writing.", "Error", wxOK | wxICON_ERROR);
+    }
+}
+
+void BusControllerFrame::addFrameToList(const FrameConfig &config) {
+  auto *component = new FrameComponent(m_scrolledWindow, config);
+  m_scrolledSizer->Add(component, 0, wxEXPAND | wxALL, 5);
+  updateListLayout();
+}
+
+void BusControllerFrame::removeFrame(FrameComponent* frame) {
+    m_scrolledSizer->Detach(frame);
+    updateListLayout();
+}
+
+void BusControllerFrame::updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig) {
+    oldFrame->updateValues(newConfig);
+}
+
+void BusControllerFrame::updateListLayout() {
+  m_scrolledSizer->Layout();
+  m_scrolledWindow->FitInside();
+}
+
+void BusControllerFrame::setStatusText(const wxString &status) { SetStatusText(status); }
+int BusControllerFrame::getDeviceId() { return wxAtoi(m_deviceIdTextInput->GetValue()); }
+void BusControllerFrame::onExit(wxCommandEvent &) { Close(true); }
+void BusControllerFrame::onCloseFrame(wxCloseEvent &) {
+  stopSendingThread();
+  Destroy();
 }

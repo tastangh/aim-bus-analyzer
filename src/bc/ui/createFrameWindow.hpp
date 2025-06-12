@@ -1,26 +1,30 @@
 #pragma once
 
+#include "../../common.hpp"
 #include <wx/wx.h>
+#include <vector>
 
-#include "frameComponent.hpp"
+class FrameComponent;
+class BusControllerFrame;
 
 class FrameCreationFrame : public wxFrame {
 public:
-  explicit FrameCreationFrame(wxWindow *parent);
-  explicit FrameCreationFrame(wxWindow *parent, FrameComponent *frame);
+  explicit FrameCreationFrame(BusControllerFrame *parent);
+  explicit FrameCreationFrame(BusControllerFrame *parent, FrameComponent *frameToEdit);
 
 private:
-  void createFrame();
-
-  void onSaveAdd(wxCommandEvent &event);
-  void onSaveEdit(wxCommandEvent &event, FrameComponent *frame);
+  void createAndLayoutControls();
+  void onSave(wxCommandEvent &event);
   void onWcChanged(wxCommandEvent &event);
   void onModeChanged(wxCommandEvent &event);
   void onRandomize(wxCommandEvent &event);
   void onClose(wxCommandEvent &event);
+  void populateFieldsFromConfig(const FrameConfig &config);
+  FrameConfig buildConfigFromFields();
+  void updateControlStates();
 
-  wxWindow *m_parent;
-
+  BusControllerFrame *m_parentFrame;
+  FrameComponent *m_editingFrame = nullptr;
   wxBoxSizer *m_mainSizer{};
   wxBoxSizer *m_cmdWord2Sizer{};
   wxButton *m_saveButton{};
@@ -32,6 +36,5 @@ private:
   wxComboBox *m_wcCombo{};
   wxComboBox *m_modeCombo{};
   wxTextCtrl *m_labelTextCtrl{};
-
   std::vector<wxTextCtrl *> m_dataTextCtrls;
 };

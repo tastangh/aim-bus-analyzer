@@ -1,52 +1,29 @@
 #pragma once
 
-#include <mutex>
+#include "../../common.hpp"
+#include "Api1553.h"
 #include <wx/tglbtn.h>
 #include <wx/wx.h>
-#include "common.hpp"
 
 class BusControllerFrame;
 
 class FrameComponent : public wxPanel {
 public:
-  explicit FrameComponent(wxWindow *parent, const std::string &label, char bus, int rt, int rt2, int sa, int sa2,
-                          int wc, BcMode mode, std::array<std::string, RT_SA_MAX_COUNT> data);
-
-  void updateValues(const std::string &label, char bus, int rt, int rt2, int sa, int sa2, int wc, BcMode mode,
-                    std::array<std::string, RT_SA_MAX_COUNT> data);
+  explicit FrameComponent(wxWindow *parent, const FrameConfig &config);
+  void updateValues(const FrameConfig &config);
   void sendFrame();
   bool isActive() const;
-
-  wxString getLabel() const { return m_label; }
-  char getBus() const { return m_bus; }
-  int getRt() const { return m_rt; }
-  int getRt2() const { return m_rt2; }
-  int getSa() const { return m_sa; }
-  int getSa2() const { return m_sa2; }
-  int getWc() const { return m_wc; }
-  BcMode getMode() const { return m_mode; }
-  const std::array<std::string, RT_SA_MAX_COUNT>& getData() const { return m_data; }
+  const FrameConfig &getFrameConfig() const { return m_config; }
+  void updateData(const std::array<AiUInt16, BC_MAX_DATA_WORDS> &newData);
 
 private:
   void onSend(wxCommandEvent &event);
   void onRemove(wxCommandEvent &event);
   void onEdit(wxCommandEvent &event);
   void onActivateToggle(wxCommandEvent &event);
-  void onUp(wxCommandEvent &event);
-  void onDown(wxCommandEvent &event);
-
-  void updateData(const std::array<std::string, RT_SA_MAX_COUNT>& data);
 
   BusControllerFrame *m_mainWindow;
-
   wxStaticText *m_allText{};
   wxToggleButton *m_activateToggle{};
-
-  std::string m_label;
-  char m_bus{};
-  int m_rt{}, m_rt2{};
-  int m_sa{}, m_sa2{};
-  int m_wc{};
-  BcMode m_mode{};
-  std::array<std::string, RT_SA_MAX_COUNT> m_data;
+  FrameConfig m_config;
 };
