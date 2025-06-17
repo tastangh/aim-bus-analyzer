@@ -8,12 +8,10 @@
 #include <cstdint>
 #include <vector>
 
-// --- Proje Geneli Sabitler ---
 constexpr int BC_MAX_DATA_WORDS = 32;
 constexpr int TOP_BAR_COMP_HEIGHT = 28;
 constexpr unsigned int BC_FRAME_TIME_MS = 100;
 
-// --- Proje Geneli Enum'lar ---
 enum class BcMode {
     BC_TO_RT,
     RT_TO_BC,
@@ -22,7 +20,6 @@ enum class BcMode {
     MODE_CODE_WITH_DATA
 };
 
-// --- Bir Frame'in tüm yapılandırmasını taşıyan veri yapısı ---
 struct FrameConfig {
   std::string label;
   char bus;
@@ -35,7 +32,6 @@ struct FrameConfig {
   std::array<std::string, BC_MAX_DATA_WORDS> data;
 };
 
-// --- Ortak Yardımcı Fonksiyonlar ---
 namespace Common {
     inline std::string getExecutableDirectory() {
         char result[PATH_MAX] = {0};

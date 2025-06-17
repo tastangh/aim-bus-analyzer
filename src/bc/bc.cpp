@@ -1,254 +1,142 @@
-#include "bc.hpp"
-#include "logger.hpp"
-#include <chrono>
-#include <cstring>
-#include <iomanip>
-#include <sstream>
-#include <thread>
+#include <iostream>
+#include <string>
 #include <vector>
+#include <stdexcept>
+#include <cstring>
+#include <chrono> // Zamanlama için eklendi
+#include <thread> // Uyku (sleep) için eklendi
+
+// AIM API başlık dosyası
+#include "Api1553.h"
 
 // --- Sabitler ---
-constexpr AiUInt16 XFER_ID_BC_TO_RT = 1;
-constexpr AiUInt16 XFER_ID_RT_TO_BC = 2;
-constexpr AiUInt16 XFER_ID_RT_TO_RT = 3;
-constexpr AiUInt16 XFER_ID_MODE_CODE = 4;
-constexpr AiUInt16 SHARED_BUFFER_ID = 1;
-constexpr int POLLING_TIMEOUT_MS = 200;
-constexpr AiReturn API_ERR_NOT_INITIALIZED = API_ERR_NAK;
+const int AIM_DEVICE_ID = 0;
+const int BIU_NUMBER = 1;
+const AiUInt16 XFER_ID_BC_TO_RT = 1;
+const AiUInt16 BUFFER_ID = 1;
 
-// --- Singleton Erişimi ---
-BC &BC::getInstance() {
-  static BC instance;
-  return instance;
-}
-
-// --- Constructor & Destructor ---
-BC::BC() {}
-BC::~BC() { shutdown(); }
-
-// --- Yaşam Döngüsü Fonksiyonları ---
-
-AiReturn BC::initialize(int devNum) {
-  std::lock_guard<std::mutex> lock(m_apiMutex);
-  if (m_isInitialized.load() && m_devNum == devNum) return API_OK;
-  if (m_isInitialized.load()) {
-    stopCyclicSend();
-    ApiClose(m_ulModHandle);
-  }
-
-  m_devNum = devNum;
-  Logger::info("Initializing Bus Controller for AIM device: " + std::to_string(m_devNum));
-
-  AiReturn ret = ApiInit();
-  if (ret < 0) { Logger::error("BC: ApiInit failed. " + getAIMError(ret)); return ret; }
-
-  TY_API_OPEN apiOpen;
-  memset(&apiOpen, 0, sizeof(apiOpen));
-  apiOpen.ul_Module = devNum; apiOpen.ul_Stream = 1; strcpy(apiOpen.ac_SrvName, "local");
-  
-  ret = ApiOpenEx(&apiOpen, &m_ulModHandle);
-  if (ret != API_OK) { Logger::error("BC: ApiOpenEx failed on device " + std::to_string(devNum) + ". " + getAIMError(ret)); m_ulModHandle = 0; return ret; }
-
-  TY_API_RESET_INFO resetInfo;
-  ret = ApiCmdReset(m_ulModHandle, (AiUInt8)apiOpen.ul_Stream, API_RESET_ALL, &resetInfo);
-  if (ret != API_OK) { Logger::error("BC: ApiCmdReset failed. " + getAIMError(ret)); ApiClose(m_ulModHandle); m_ulModHandle = 0; return ret; }
-
-  ret = setupBoardForBC();
-  if (ret != API_OK) { ApiClose(m_ulModHandle); m_ulModHandle = 0; return ret; }
-
-  m_isInitialized = true;
-  Logger::info("BC Initialized successfully for device " + std::to_string(devNum));
-  return API_OK;
-}
-
-void BC::shutdown() {
-  stopCyclicSend();
-  std::lock_guard<std::mutex> lock(m_apiMutex);
-  if (!m_isInitialized.load()) return;
-
-  if (m_ulModHandle != 0) {
-    ApiCmdBCHalt(m_ulModHandle, 1);
-    ApiClose(m_ulModHandle);
-    Logger::info("BC Shutdown complete for device: " + std::to_string(m_devNum));
-  }
-  m_ulModHandle = 0; m_devNum = -1; m_isInitialized = false;
-}
-
-bool BC::isInitialized() const {
-  return m_isInitialized.load();
-}
-
-AiReturn BC::setupBoardForBC() {
-  Logger::debug("Configuring board for Bus Controller mode...");
-  AiReturn ret = ApiCmdBCIni(m_ulModHandle, 1, 0, 0, 0, 0);
-  if (ret != API_OK) { Logger::error("BC: ApiCmdBCIni failed. " + getAIMError(ret)); }
-  return ret;
-}
-
-// --- Acyclic Gönderim ---
-AiReturn BC::sendAcyclicFrame(const FrameConfig &config, std::array<AiUInt16, BC_MAX_DATA_WORDS> &data_out) {
-    std::vector<FrameConfig> singleFrameVector = {config};
-    
-    AiReturn ret = setupFrameSchedule(singleFrameVector);
-    if (ret != API_OK) return ret;
-
-    // Acyclic gönderim için major frame'i sadece 1 kez çalıştır
-    ret = ApiCmdBCStart(m_ulModHandle, 1, API_BC_START_IMMEDIATELY, 1, 1.0f, 0, nullptr, nullptr);
+// --- Hata kontrolü için yardımcı fonksiyon ---
+void check_api_return(AiReturn ret, const std::string& function_name) {
     if (ret != API_OK) {
-        Logger::error("BC: Acyclic ApiCmdBCStart failed. " + getAIMError(ret));
-        return ret;
+        const char* error_message = ApiGetErrorMessage(ret);
+        std::string message = "HATA: " + function_name + " basarisiz oldu. Kod: " + std::to_string(ret) +
+                              " -> " + (error_message ? error_message : "Bilinmeyen Hata");
+        throw std::runtime_error(message);
     }
-    
-    // Transferin tamamlanmasını bekle (sadece 1. transfer için)
-    ret = waitForTransferCompletion(1); 
-    ApiCmdBCHalt(m_ulModHandle, 1);
-    if (ret != API_OK) return ret;
-    
-    // RT'den veri okunması gereken durumlar için buffer'ı oku
-    int word_count_to_read = (config.mode == BcMode::RT_TO_BC || config.mode == BcMode::RT_TO_RT) ? ((config.wc == 0) ? 32 : config.wc) : 0;
-    if (word_count_to_read > 0) {
-        ret = ApiCmdBufRead(m_ulModHandle, 1, API_BUF_BC_MSG, SHARED_BUFFER_ID, 0, word_count_to_read, data_out.data(), nullptr, nullptr);
-        if (ret != API_OK) return ret;
-    }
-
-    return API_OK;
+    std::cout << "OK: " << function_name << " basariyla calisti." << std::endl;
 }
 
-// --- Cyclic Gönderim ---
-void BC::startCyclicSend(const std::vector<FrameConfig>& activeFrames, std::chrono::milliseconds interval) {
-    if (m_isCyclicSending.load()) return;
-    m_cyclicFrames = activeFrames;
-    m_cyclicInterval = interval;
-    m_isCyclicSending = true;
-    m_cyclicSendThread = std::thread(&BC::cyclicSendLoop, this);
-}
+// --- Ana Fonksiyon ---
+int main() {
+    AiUInt32 board_handle = 0;
+    bool api_initialized = false;
 
-void BC::stopCyclicSend() {
-    if (!m_isCyclicSending.load()) return;
-    m_isCyclicSending = false;
-    if (m_cyclicSendThread.joinable()) {
-        m_cyclicSendThread.join();
-    }
-    if (m_isInitialized.load()) {
-        ApiCmdBCHalt(m_ulModHandle, 1);
-    }
-}
+    try {
+        std::cout << "AIM MIL-STD-1553 Basit Bus Controller Uygulamasi" << std::endl;
+        std::cout << "-------------------------------------------------" << std::endl;
 
-bool BC::isCyclicSending() const {
-  return m_isCyclicSending.load();
-}
-
-void BC::cyclicSendLoop() {
-    Logger::info("Cyclic send thread started.");
-    
-    AiReturn ret = setupFrameSchedule(m_cyclicFrames);
-    if (ret != API_OK) {
-        Logger::error("Failed to setup cyclic frame schedule. Stopping send thread.");
-        m_isCyclicSending = false;
-        return;
-    }
-    
-    float frameTimeMs = static_cast<float>(m_cyclicInterval.count());
-    ret = ApiCmdBCStart(m_ulModHandle, 1, API_BC_START_IMMEDIATELY, 0, frameTimeMs, 0, nullptr, nullptr);
-    if (ret != API_OK) {
-        Logger::error("BC: Cyclic ApiCmdBCStart failed. " + getAIMError(ret));
-        m_isCyclicSending = false;
-        return;
-    }
-    
-    while (m_isCyclicSending.load()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    
-    Logger::info("Cyclic send thread stopped.");
-}
-
-// --- Ortak ve Yardımcı Fonksiyonlar ---
-
-AiReturn BC::setupFrameSchedule(const std::vector<FrameConfig>& frames) {
-    std::lock_guard<std::mutex> lock(m_apiMutex);
-    if (!m_isInitialized.load() || frames.empty()) return API_ERR_NAK;
-
-    std::vector<TY_API_BC_XFER> xfer_list;
-    for(size_t i = 0; i < frames.size(); ++i) {
-        const auto& config = frames[i];
-        TY_API_BC_XFER xfer;
-        memset(&xfer, 0, sizeof(xfer));
+        // 1. API Başlatma
+        AiReturn init_result = ApiInit();
+        if (init_result < 0) {
+            const char* err_msg = ApiGetErrorMessage(init_result);
+            std::cerr << "KRITIK HATA: ApiInit basarisiz oldu. Kod: " << init_result << " -> " << (err_msg ? err_msg : "Bilinmeyen Hata") << std::endl;
+            return 1;
+        }
+        api_initialized = true;
+        std::cout << "OK: ApiInit basariyla calisti. Bulunan kart sayisi: " << init_result << std::endl;
         
-        xfer.xid = i + 1;
-        xfer.hid = SHARED_BUFFER_ID;
-        xfer.chn = (config.bus == 'A' ? API_BC_XFER_BUS_PRIMARY : API_BC_XFER_BUS_SECONDARY);
-        xfer.wcnt = config.wc;
+        // 2. Kartı Açma ve Resetleme
+        TY_API_OPEN api_open_params;
+        memset(&api_open_params, 0, sizeof(api_open_params));
+        api_open_params.ul_Module = AIM_DEVICE_ID;
+        api_open_params.ul_Stream = BIU_NUMBER;
+        strcpy(api_open_params.ac_SrvName, "local");
+        
+        check_api_return(ApiOpenEx(&api_open_params, &board_handle), "ApiOpenEx");
 
-        switch (config.mode) {
-            case BcMode::BC_TO_RT: xfer.type = API_BC_TYPE_BCRT; xfer.rcv_rt = config.rt; xfer.rcv_sa = config.sa; break;
-            case BcMode::RT_TO_BC: xfer.type = API_BC_TYPE_RTBC; xfer.xmt_rt = config.rt; xfer.xmt_sa = config.sa; break;
-            case BcMode::RT_TO_RT: xfer.type = API_BC_TYPE_RTRT; xfer.xmt_rt = config.rt; xfer.xmt_sa = config.sa; xfer.rcv_rt = config.rt2; xfer.rcv_sa = config.sa2; break;
-            case BcMode::MODE_CODE_NO_DATA: case BcMode::MODE_CODE_WITH_DATA:
-                xfer.type = API_BC_TYPE_BCRT; xfer.rcv_rt = config.rt; xfer.rcv_sa = (config.sa == 31) ? 31 : 0; xfer.wcnt = config.sa; break;
+        TY_API_RESET_INFO reset_info;
+        memset(&reset_info, 0, sizeof(reset_info));
+        check_api_return(ApiCmdReset(board_handle, BIU_NUMBER, API_RESET_ALL, &reset_info), "ApiCmdReset");
+
+        // 3. Bus Controller Modunu Ayarlama
+        std::cout << "\nBus Controller modu ayarlanior..." << std::endl;
+        check_api_return(ApiCmdBCIni(board_handle, BIU_NUMBER, 0, 0, 0, 0), "ApiCmdBCIni");
+
+        // 4. Transfer ve Buffer Tanımlamaları
+        TY_API_BC_BH_INFO bh_info;
+        memset(&bh_info, 0, sizeof(bh_info));
+        check_api_return(ApiCmdBCBHDef(board_handle, BIU_NUMBER, BUFFER_ID, BUFFER_ID, 0, 0, API_QUEUE_SIZE_1, 0, 0, 0, 0, 0, &bh_info), "ApiCmdBCBHDef");
+
+        AiUInt16 message_data[32] = { 0 }; // Veri dizisini burada tanımla
+        check_api_return(ApiCmdBufWriteBlock(board_handle, BIU_NUMBER, API_BUF_BC_MSG, BUFFER_ID, 0, 0, 3, message_data), "ApiCmdBufWriteBlock");
+
+        TY_API_BC_XFER bc_xfer;
+        memset(&bc_xfer, 0, sizeof(bc_xfer));
+        bc_xfer.xid = XFER_ID_BC_TO_RT;
+        bc_xfer.hid = BUFFER_ID;
+        bc_xfer.type = API_BC_TYPE_BCRT;
+        bc_xfer.rcv_rt = 1;
+        bc_xfer.rcv_sa = 1;
+        bc_xfer.wcnt = 3;
+
+        AiUInt32 desc_addr = 0;
+        check_api_return(ApiCmdBCXferDef(board_handle, BIU_NUMBER, &bc_xfer, &desc_addr), "ApiCmdBCXferDef");
+        
+        // 5. Framing
+        TY_API_BC_FRAME minor_frame;
+        memset(&minor_frame, 0, sizeof(minor_frame));
+        minor_frame.id = 1;
+        minor_frame.cnt = 1;
+        minor_frame.instr[0] = API_BC_INSTR_TRANSFER;
+        minor_frame.xid[0] = XFER_ID_BC_TO_RT;
+        check_api_return(ApiCmdBCFrameDef(board_handle, BIU_NUMBER, &minor_frame), "ApiCmdBCFrameDef");
+        
+        TY_API_BC_MFRAME major_frame;
+        memset(&major_frame, 0, sizeof(major_frame));
+        major_frame.cnt = 1;
+        major_frame.fid[0] = minor_frame.id;
+        check_api_return(ApiCmdBCMFrameDef(board_handle, BIU_NUMBER, &major_frame), "ApiCmdBCMFrameDef");
+
+        // 6. Bus Controller'ı Başlat
+        std::cout << "\nFraming tamamlandi. Bus Controller baslatiliyor..." << std::endl;
+        
+        AiUInt32 major_frame_addr;
+        AiUInt32 minor_frame_addrs[64];
+        // DÜZELTME: count=0 (sürekli) ve frame_time=100.0f (100ms) olarak ayarlandı
+        check_api_return(ApiCmdBCStart(board_handle, BIU_NUMBER, API_BC_START_IMMEDIATELY, 0, 100.0f, 0, &major_frame_addr, minor_frame_addrs), "ApiCmdBCStart");
+
+        std::cout << "BC basariyla baslatildi ve her 100ms'de bir veri gonderiyor..." << std::endl;
+        
+        // DÜZELTME: Her 100ms'de bir veri tamponunu güncelleyen döngü
+        for (int i = 0; i < 50; ++i) { // Örnek olarak 50 defa (5 saniye) gönderim yap
+            // Veriyi güncelle (basit bir sayaç)
+            message_data[0]++;
+            message_data[1] = 0xAAAA;
+            message_data[2] = i;
+
+            // Güncellenmiş veriyi AIM kartındaki mevcut tampona yaz
+            check_api_return(ApiCmdBufWriteBlock(board_handle, BIU_NUMBER, API_BUF_BC_MSG, BUFFER_ID, 0, 0, 3, message_data), "ApiCmdBufWriteBlock");
+            printf("Gonderilen Veri: %04X %04X %04X\n", message_data[0], message_data[1], message_data[2]);
+
+            // 100 milisaniye bekle
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+        
+    } catch (const std::runtime_error& e) {
+        std::cerr << "Programda bir hata olustu: " << e.what() << std::endl;
+    }
 
-        AiReturn ret = ApiCmdBCBHDef(m_ulModHandle, 1, xfer.hid, 0, 0, 0, 1, 0, 0, 0, 0, 0, nullptr);
-        if (ret != API_OK) return ret;
-        ret = ApiCmdBCXferDef(m_ulModHandle, 1, &xfer, nullptr);
-        if (ret != API_OK) return ret;
+    // 7. Temiz Kapatma
+    if (board_handle != 0) {
+        std::cout << "\nUygulama kapatiliyor, kaynaklar serbest birakiliyor..." << std::endl;
+        ApiCmdBCHalt(board_handle, BIU_NUMBER);
+        ApiClose(board_handle);
+    }
 
-        int word_count_to_send = (config.mode == BcMode::BC_TO_RT || config.mode == BcMode::MODE_CODE_WITH_DATA) ? ((config.wc == 0 && config.mode != BcMode::MODE_CODE_WITH_DATA) ? 32 : config.wc) : 0;
-        if (config.mode == BcMode::MODE_CODE_WITH_DATA) word_count_to_send = 1;
-        if (word_count_to_send > 0) {
-            AiUInt16 data_buffer[BC_MAX_DATA_WORDS] = {0};
-            convertStringDataToU16(config.data, data_buffer, word_count_to_send);
-            ret = ApiCmdBufWriteBlock(m_ulModHandle, 1, API_BUF_BC_MSG, xfer.hid, 0, 0, word_count_to_send, data_buffer);
-            if (ret != API_OK) return ret;
-        }
-        xfer_list.push_back(xfer);
+    if (api_initialized) {
+        ApiExit();
     }
     
-    TY_API_BC_FRAME minor_frame;
-    memset(&minor_frame, 0, sizeof(minor_frame));
-    minor_frame.id = 1;
-    minor_frame.cnt = frames.size();
-    for(size_t i = 0; i < frames.size(); ++i) {
-        minor_frame.instr[i] = API_BC_INSTR_TRANSFER;
-        minor_frame.xid[i] = xfer_list[i].xid;
-    }
-    ApiCmdBCFrameDef(m_ulModHandle, 1, &minor_frame);
-
-    TY_API_BC_MFRAME major_frame;
-    memset(&major_frame, 0, sizeof(major_frame));
-    major_frame.cnt = 1;
-    major_frame.fid[0] = minor_frame.id;
-    ApiCmdBCMFrameDef(m_ulModHandle, 1, &major_frame);
-
-    return API_OK;
-}
-
-AiReturn BC::waitForTransferCompletion(AiUInt16 xid) {
-    auto startTime = std::chrono::steady_clock::now();
-    TY_API_BC_XFER_DSP xfer_status;
-    while(true) {
-        AiReturn ret = ApiCmdBCXferRead(m_ulModHandle, 1, xid, 0, &xfer_status);
-        if (ret != API_OK) { Logger::error("BC: ApiCmdBCXferRead failed during polling. " + getAIMError(ret)); return ret; }
-        if (xfer_status.brw & 0x01) { 
-            if (xfer_status.brw & 0x80) { Logger::warn("Transfer XID " + std::to_string(xid) + " completed with an error. Report Word: 0x" + std::to_string(xfer_status.brw)); }
-            return API_OK;
-        }
-        auto now = std::chrono::steady_clock::now();
-        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count() > POLLING_TIMEOUT_MS) {
-            Logger::error("Transfer XID " + std::to_string(xid) + " timed out after " + std::to_string(POLLING_TIMEOUT_MS) + " ms.");
-            return API_ERR_TIMEOUT;
-        }
-        std::this_thread::sleep_for(std::chrono::microseconds(200));
-    }
-}
-
-void BC::convertStringDataToU16(const std::array<std::string, BC_MAX_DATA_WORDS>& str_data, AiUInt16* u16_data_buffer, int count) {
-    for (int i = 0; i < count; ++i) {
-        try { u16_data_buffer[i] = static_cast<AiUInt16>(std::stoul(str_data.at(i), nullptr, 16)); } catch (...) { u16_data_buffer[i] = 0; }
-    }
-}
-
-std::string BC::getAIMError(AiReturn error_code) {
-    const char* msg = ApiGetErrorMessage(error_code);
-    return msg ? std::string(msg) : "Unknown AIM API Error";
+    std::cout << "Cikis yapildi." << std::endl;
+    return 0;
 }

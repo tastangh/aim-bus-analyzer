@@ -1,55 +1,52 @@
 #ifndef AIM_BC_HPP
 #define AIM_BC_HPP
 
-#include "../common.hpp"
 #include "Api1553.h"
-#include <array>
-#include <atomic>
-#include <chrono>
-#include <mutex>
 #include <string>
-#include <thread>
+#include <stdexcept>
 #include <vector>
+#include <chrono>
+
+// Hata kontrolü için bir exception sınıfı
+class AimException : public std::runtime_error {
+public:
+    AimException(const std::string& message) : std::runtime_error(message) {}
+};
 
 class BC {
 public:
-  static BC &getInstance();
-  BC(const BC &) = delete;
-  BC &operator=(const BC &) = delete;
+    // Singleton pattern'i ile tek bir BC nesnesi olmasını sağlıyoruz
+    static BC& getInstance() {
+        static BC instance;
+        return instance;
+    }
 
-  AiReturn initialize(int devNum);
-  void shutdown();
-  bool isInitialized() const;
-  
-  // DÜZELTME: Fonksiyon imzası tekrar 2 parametreli hale getirildi.
-  AiReturn sendAcyclicFrame(const FrameConfig &config, std::array<AiUInt16, BC_MAX_DATA_WORDS> &data_out);
+    // Initialize ve Shutdown fonksiyonları
+    void initialize(int devNum);
+    void shutdown();
 
-  void startCyclicSend(const std::vector<FrameConfig>& activeFrames, std::chrono::milliseconds interval);
-  void stopCyclicSend();
-  bool isCyclicSending() const;
-  
-  std::string getAIMError(AiReturn error_code);
+    // Veri gönderme fonksiyonu
+    void sendDataPeriodically(const std::vector<AiUInt16>& initial_data, int period_ms, int number_of_sends);
+
+    // Kopyalama ve atama operatörlerini siliyoruz
+    BC(const BC &) = delete;
+    BC& operator=(const BC &) = delete;
 
 private:
-  BC();
-  ~BC();
+    BC();  // Kurucu fonksiyon (constructor) özel
+    ~BC(); // Yıkıcı fonksiyon (destructor) özel
 
-  AiReturn setupBoardForBC();
-  AiReturn setupFrameSchedule(const std::vector<FrameConfig>& frames);
-  AiReturn waitForTransferCompletion(AiUInt16 xid);
-  void cyclicSendLoop();
-  
-  void convertStringDataToU16(const std::array<std::string, BC_MAX_DATA_WORDS> &str_data, AiUInt16 *u16_data_buffer, int count);
-  
-  int m_devNum = -1;
-  AiUInt32 m_ulModHandle = 0;
-  std::atomic<bool> m_isInitialized{false};
-  std::mutex m_apiMutex;
+    void checkApiReturn(AiReturn ret, const std::string& function_name);
 
-  std::thread m_cyclicSendThread;
-  std::atomic<bool> m_isCyclicSending{false};
-  std::vector<FrameConfig> m_cyclicFrames;
-  std::chrono::milliseconds m_cyclicInterval;
+    int m_devNum = -1;
+    AiUInt32 m_boardHandle = 0;
+    bool m_isInitialized = false;
+    bool m_isBoardOpen = false;
+
+    // Sabitler
+    const int BIU_NUMBER = 1;
+    const AiUInt16 XFER_ID_BC_TO_RT = 1;
+    const AiUInt16 BUFFER_ID = 1;
 };
 
 #endif // AIM_BC_HPP
