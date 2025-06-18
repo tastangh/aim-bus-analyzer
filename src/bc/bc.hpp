@@ -1,52 +1,83 @@
-#ifndef AIM_BC_HPP
-#define AIM_BC_HPP
+/* SPDX-FileCopyrightText: 2024 AIM GmbH <info@aim-online.com> */
+/* SPDX-License-Identifier: MIT */
 
+#ifndef BC_HPP
+#define BC_HPP
+
+// --- Gerekli temel AIM API başlık dosyaları ---
+// mil_util.h bağımlılığı tamamen kaldırılmıştır.
+#include "AiOs.h"
 #include "Api1553.h"
-#include <string>
-#include <stdexcept>
-#include <vector>
-#include <chrono>
 
-// Hata kontrolü için bir exception sınıfı
-class AimException : public std::runtime_error {
+/**
+ * @class BusController
+ * @brief MIL-STD-1553 Bus Controller (BC) işlemlerini yöneten, bağımsız bir C++ sınıfı.
+ *
+ * Bu sınıf, harici bir yardımcı kütüphane (mil_util) gerektirmeden, yalnızca
+ * temel AIM API'sini kullanarak bir AIM kartını BC olarak yönetir.
+ */
+class BusController
+{
 public:
-    AimException(const std::string& message) : std::runtime_error(message) {}
-};
+    /**
+     * @brief BusController sınıfının kurucusu.
+     * @param device Kullanılacak kartın modül numarası.
+     * @param stream Kullanılacak akış (stream) numarası.
+     */
+    BusController(AiUInt32 device, AiUInt32 stream);
 
-class BC {
-public:
-    // Singleton pattern'i ile tek bir BC nesnesi olmasını sağlıyoruz
-    static BC& getInstance() {
-        static BC instance;
-        return instance;
-    }
+    /**
+     * @brief BusController sınıfının yıkıcısı.
+     * Kaynakları otomatik olarak temizler (ApiClose, ApiExit).
+     */
+    ~BusController();
 
-    // Initialize ve Shutdown fonksiyonları
-    void initialize(int devNum);
+    /**
+     * @brief Kartı ve API'yi başlatır.
+     * @return Başlatma başarılı olursa true, aksi takdirde false döner.
+     */
+    bool initialize();
+
+    /**
+     * @brief BC örnek simülasyonunu çalıştırır.
+     */
+    void runSample();
+
+    /**
+     * @brief API bağlantısını kapatır ve kaynakları serbest bırakır.
+     */
     void shutdown();
 
-    // Veri gönderme fonksiyonu
-    void sendDataPeriodically(const std::vector<AiUInt16>& initial_data, int period_ms, int number_of_sends);
-
-    // Kopyalama ve atama operatörlerini siliyoruz
-    BC(const BC &) = delete;
-    BC& operator=(const BC &) = delete;
-
 private:
-    BC();  // Kurucu fonksiyon (constructor) özel
-    ~BC(); // Yıkıcı fonksiyon (destructor) özel
+    /**
+     * @brief Simülasyon için BC transferlerini ve çerçevelerini hazırlar.
+     * @return Hazırlık başarılı olursa API_OK, aksi takdirde bir hata kodu döner.
+     */
+    AiReturn prepare();
 
-    void checkApiReturn(AiReturn ret, const std::string& function_name);
+    /**
+     * @brief Tek bir BC transfer tanımı oluşturur.
+     * MilUtilBCCreateTransfer fonksiyonunun yerini alır.
+     * @param transferId Transfer için benzersiz kimlik.
+     * @param type Transfer tipi (örn. API_BC_TYPE_BCRT).
+     * @param txRt, txSa, rxRt, rxSa, wordCount Transfer parametreleri.
+     * @param headerId Bu transfer için kullanılacak başlık kimliği.
+     * @return Başarılı olursa API_OK, aksi takdirde hata kodu döner.
+     */
+    AiReturn createBcTransfer(AiUInt16 transferId, AiUInt8 type,
+                              AiUInt8 txRt, AiUInt8 txSa,
+                              AiUInt8 rxRt, AiUInt8 rxSa,
+                              AiUInt8 wordCount, AiUInt16 headerId);
+    
+    // Sınıf üyeleri
+    AiUInt32 m_device;          ///< Kart modül numarası
+    AiUInt32 m_stream;          ///< Kart akış numarası
+    AiUInt32 m_modHandle;       ///< API tarafından döndürülen modül tanıtıcısı
+    bool m_isInitialized;       ///< initialize() fonksiyonunun başarıyla çağrılıp çağrılmadığı
 
-    int m_devNum = -1;
-    AiUInt32 m_boardHandle = 0;
-    bool m_isInitialized = false;
-    bool m_isBoardOpen = false;
-
-    // Sabitler
-    const int BIU_NUMBER = 1;
-    const AiUInt16 XFER_ID_BC_TO_RT = 1;
-    const AiUInt16 BUFFER_ID = 1;
+    // mil_util'deki global state'in yerini alan özel üyeler
+    AiUInt32 m_nextBcHeaderId;  ///< Bir sonraki BC başlık kimliği için sayaç
+    AiUInt32 m_nextBufferId;    ///< Bir sonraki buffer kimliği için sayaç
 };
 
-#endif // AIM_BC_HPP
+#endif // BC_HPP
