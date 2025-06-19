@@ -4,6 +4,7 @@
 #include "frameComponent.hpp"
 #include "bc.hpp"
 #include <iostream>
+#include <algorithm> // std::remove için
 
 BusControllerFrame::BusControllerFrame()
     : wxFrame(nullptr, wxID_ANY, "AIM MIL-STD-1553 Bus Controller", wxDefaultPosition, wxSize(800, 600)) {
@@ -62,62 +63,78 @@ BusControllerFrame::~BusControllerFrame() {
   stopSendingThread();
 }
 
-// DÜZELTME: Eksik olan fonksiyon gövdesi eklendi.
+void BusControllerFrame::addFrameToList(FrameConfig config) {
+    std::cout << "[UI] Yeni çerçeve ekleniyor: " << config.label << std::endl;
+    auto& bc = BusController::getInstance();
+    if (!bc.isInitialized()) {
+        std::cout << "[UI] BC başlatılmamış, initialize çağrılıyor..." << std::endl;
+        AiReturn ret = bc.initialize(getDeviceId());
+        if (ret != API_OK) {
+            wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
+            return;
+        }
+    }
+    
+    // Önce UI bileşenini oluşturuyoruz
+    auto *component = new FrameComponent(m_scrolledWindow, config);
+
+    // Sonra bu bileşen için donanım kaynaklarını tanımlıyoruz
+    AiReturn ret = bc.defineFrameResources(component);
+    if (ret != API_OK) {
+        wxMessageBox("Failed to define frame resources on AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
+        component->Destroy(); // Kaynak ayrılamazsa oluşturulan bileşeni yok et
+        return;
+    }
+    
+    // Her şey başarılıysa listelere ekle
+    m_frameComponents.push_back(component);
+    m_scrolledSizer->Add(component, 0, wxEXPAND | wxALL, 5);
+    updateListLayout();
+}
+
+void BusControllerFrame::updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig) {
+    std::cout << "[UI] Çerçeve güncelleniyor: " << newConfig.label << std::endl;
+    // Güncellemenin en temiz yolu, eski bileşeni ve kaynaklarını silip
+    // yeni yapılandırma ile yenisini oluşturmaktır.
+    removeFrame(oldFrame);
+    addFrameToList(newConfig);
+}
+
+
+void BusControllerFrame::removeFrame(FrameComponent* frame) {
+    if (!frame) return;
+    std::cout << "[UI] Çerçeve listeden kaldırılıyor: " << frame->getFrameConfig().label << std::endl;
+    
+    // Önce sizer'dan ayır
+    m_scrolledSizer->Detach(frame);
+    
+    // Sonra bileşen listesinden çıkar
+    m_frameComponents.erase(std::remove(m_frameComponents.begin(), m_frameComponents.end(), frame), m_frameComponents.end());
+    
+    // Arayüzü güncelle
+    updateListLayout();
+
+    // Son olarak pencereyi güvenli bir şekilde yok et
+    wxTheApp->CallAfter([frame](){ frame->Destroy(); });
+}
+
 void BusControllerFrame::onAddFrameClicked(wxCommandEvent &) {
     std::cout << "[UI] 'Add Frame' tıklandı. Yeni çerçeve oluşturma penceresi açılıyor." << std::endl;
     auto *frame = new FrameCreationFrame(this);
     frame->Show(true);
 }
 
-void BusControllerFrame::sendActiveFramesLoop() {
-    auto promise_ptr = std::make_shared<std::promise<std::vector<FrameComponent*>>>();
-    std::future<std::vector<FrameComponent*>> future = promise_ptr->get_future();
-    wxTheApp->CallAfter([this, promise_ptr]() {
-        std::vector<FrameComponent*> activeFrames;
-        for (auto* frame : m_frameComponents) {
-            if (frame && frame->isActive()) { activeFrames.push_back(frame); }
-        }
-        promise_ptr->set_value(activeFrames);
-    });
-    std::vector<FrameComponent*> activeFrames = future.get();
-    auto& bc = BusController::getInstance();
-    if (!bc.isInitialized()) {
-        AiReturn ret = bc.initialize(getDeviceId());
-        if (ret != API_OK) {
-            wxTheApp->CallAfter([this, ret]{ wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); stopSendingThread(); });
-            return;
-        }
-    }
-    if (activeFrames.empty()) {
-        wxTheApp->CallAfter([this] { setStatusText("No active frames to send. Stopping."); stopSendingThread(); });
-        return;
-    }
-    do {
-        for (FrameComponent* frame : activeFrames) {
-            if (!m_isSending) break;
-            frame->sendFrame();
-            std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        }
-        if (m_isSending && m_repeatToggle->GetValue()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(BC_FRAME_TIME_MS));
-        }
-    } while (m_isSending && m_repeatToggle->GetValue());
-    if (m_isSending) {
-        stopSendingThread();
-    }
-}
-void BusControllerFrame::onClearFramesClicked(wxCommandEvent &) { 
+void BusControllerFrame::onClearFramesClicked(wxCommandEvent &) {
     if (m_isSending) {
         wxMessageBox("Please stop sending frames before clearing the list.", "Warning", wxOK | wxICON_WARNING);
-        return; 
+        return;
     }
-    for (auto* comp : m_frameComponents) {
-        // wxWidgets, bir pencere silindiğinde sizer'dan otomatik olarak kaldırır.
-        comp->Destroy(); 
-    } 
-    m_frameComponents.clear(); 
-    updateListLayout(); 
-    setStatusText("All frames cleared."); 
+    // Listenin bir kopyası üzerinde çalışmak, döngü sırasında silme işleminden kaynaklanacak sorunları önler
+    auto components_to_delete = m_frameComponents;
+    for (auto* comp : components_to_delete) {
+        removeFrame(comp);
+    }
+    setStatusText("All frames cleared.");
 }
 
 void BusControllerFrame::onRepeatToggle(wxCommandEvent &) {
@@ -145,7 +162,7 @@ void BusControllerFrame::stopSendingThread() {
   if (m_sendThread.joinable()) {
     m_sendThread.join();
   }
-  wxTheApp->CallAfter([this] { 
+  wxTheApp->CallAfter([this] {
     if(this) {
         m_sendActiveFramesToggle->SetValue(false);
         m_sendActiveFramesToggle->SetLabel("Send Active Frames");
@@ -154,27 +171,44 @@ void BusControllerFrame::stopSendingThread() {
   });
 }
 
-void BusControllerFrame::addFrameToList(const FrameConfig &config) {
-  std::cout << "[UI] Yeni çerçeve listeye ekleniyor: " << config.label << std::endl;
-  auto *component = new FrameComponent(m_scrolledWindow, config);
-  m_frameComponents.push_back(component);
-  m_scrolledSizer->Add(component, 0, wxEXPAND | wxALL, 5);
-  updateListLayout();
-}
+void BusControllerFrame::sendActiveFramesLoop() {
+    auto promise_ptr = std::make_shared<std::promise<std::vector<FrameComponent*>>>();
+    std::future<std::vector<FrameComponent*>> future = promise_ptr->get_future();
+    wxTheApp->CallAfter([this, promise_ptr]() {
+        std::vector<FrameComponent*> activeFrames;
+        for (auto* frame : m_frameComponents) {
+            if (frame && frame->isActive()) { activeFrames.push_back(frame); }
+        }
+        promise_ptr->set_value(activeFrames);
+    });
+    std::vector<FrameComponent*> activeFrames = future.get();
+    
+    auto& bc = BusController::getInstance();
+    if (!bc.isInitialized()) {
+        AiReturn ret = bc.initialize(getDeviceId());
+        if (ret != API_OK) {
+            wxTheApp->CallAfter([this, ret]{ wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); stopSendingThread(); });
+            return;
+        }
+    }
+    if (activeFrames.empty()) {
+        wxTheApp->CallAfter([this] { setStatusText("No active frames to send. Stopping."); stopSendingThread(); });
+        return;
+    }
+    do {
+        for (FrameComponent* frame : activeFrames) {
+            if (!m_isSending) break;
+            frame->sendFrame();
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
+        }
+        if (m_isSending && m_repeatToggle->GetValue()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(BC_FRAME_TIME_MS));
+        }
+    } while (m_isSending && m_repeatToggle->GetValue());
 
-void BusControllerFrame::removeFrame(FrameComponent* frame) {
-    if (!frame) return;
-    std::cout << "[UI] Çerçeve listeden ve sizer'dan kaldırılıyor." << std::endl;
-    m_scrolledSizer->Detach(frame);
-    m_frameComponents.erase(std::remove(m_frameComponents.begin(), m_frameComponents.end(), frame), m_frameComponents.end());
-    // Destroy çağrısı pencereyi ve kaynaklarını güvenli bir şekilde siler.
-    // CallAfter, olası thread sorunlarını önler.
-    wxTheApp->CallAfter([frame](){ frame->Destroy(); });
-    updateListLayout();
-}
-
-void BusControllerFrame::updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig) {
-    oldFrame->updateValues(newConfig);
+    if (m_isSending) {
+        stopSendingThread();
+    }
 }
 
 void BusControllerFrame::updateListLayout() {

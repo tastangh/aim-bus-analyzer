@@ -9,7 +9,7 @@
 #include <atomic>
 #include <vector>
 #include <future>
-#include <memory> // DÜZELTME: std::shared_ptr için eklendi
+#include <memory>
 
 class FrameComponent;
 
@@ -18,7 +18,7 @@ public:
   BusControllerFrame();
   ~BusControllerFrame();
 
-  void addFrameToList(const FrameConfig &config);
+  void addFrameToList(FrameConfig config); // Değişiklik yapılabilmesi için by-value
   void removeFrame(FrameComponent* frame);
   void updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig);
   

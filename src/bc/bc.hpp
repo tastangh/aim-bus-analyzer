@@ -4,21 +4,24 @@
 #include "common.hpp"
 #include "AiOs.h"
 #include "Api1553.h"
-
 #include <atomic>
 #include <mutex>
+
+class FrameComponent; // Forward declaration
 
 class BusController {
 public:
     static BusController& getInstance();
-
     BusController(const BusController&) = delete;
     void operator=(const BusController&) = delete;
 
     AiReturn initialize(int deviceId, int streamId = 1);
     void shutdown();
     bool isInitialized() const;
-    AiReturn sendAcyclicFrame(const FrameConfig& config, std::array<AiUInt16, BC_MAX_DATA_WORDS>& receivedData);
+    
+    AiReturn defineFrameResources(FrameComponent* frame);
+    AiReturn sendAcyclicFrame(const FrameComponent* frame, std::array<AiUInt16, BC_MAX_DATA_WORDS>& receivedData);
+    
     static const char* getAIMError(AiReturn ret);
 
 private:
