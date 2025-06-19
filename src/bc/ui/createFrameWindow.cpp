@@ -1,9 +1,11 @@
+// fileName: createFrameWindow.cpp
 #include "createFrameWindow.hpp"
-#include "frameComponent.hpp"
 #include "mainWindow.hpp"
+#include "frameComponent.hpp"
+
+#include <sstream>
 #include <iomanip>
 #include <random>
-#include <sstream>
 
 FrameCreationFrame::FrameCreationFrame(BusControllerFrame *parent)
     : wxFrame(parent, wxID_ANY, "Create New 1553 Frame"), m_parentFrame(parent) {
@@ -21,7 +23,7 @@ FrameCreationFrame::FrameCreationFrame(BusControllerFrame *parent, FrameComponen
 }
 
 void FrameCreationFrame::createAndLayoutControls() {
-    m_mainSizer = new wxBoxSizer(wxVERTICAL);
+    auto *mainSizer = new wxBoxSizer(wxVERTICAL);
     auto *topSizer = new wxBoxSizer(wxHORIZONTAL);
     m_cmdWord2Sizer = new wxBoxSizer(wxHORIZONTAL);
     auto *dataGridSizer = new wxGridSizer(4, 8, 5, 5);
@@ -53,15 +55,20 @@ void FrameCreationFrame::createAndLayoutControls() {
         dataGridSizer->Add(data, 0, wxEXPAND);
     }
     
-    // Layout
     topSizer->Add(new wxStaticText(this, wxID_ANY, "Bus:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); topSizer->Add(m_busCombo, 0, wxRIGHT, 10);
     topSizer->Add(new wxStaticText(this, wxID_ANY, "Mode:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); topSizer->Add(m_modeCombo, 0, wxRIGHT, 10);
     topSizer->Add(new wxStaticText(this, wxID_ANY, "RT:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); topSizer->Add(m_rtCombo, 0, wxRIGHT, 10);
-    topSizer->Add(new wxStaticText(this, wxID_ANY, "SA/MC:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); topSizer->Add(m_saCombo, 0, wxRIGHT, 10);
-    topSizer->Add(new wxStaticText(this, wxID_ANY, "WC:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); topSizer->Add(m_wcCombo, 0, wxRIGHT, 10);
     
-    m_cmdWord2Sizer->Add(new wxStaticText(this, wxID_ANY, "RT2:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); m_cmdWord2Sizer->Add(m_rt2Combo, 0, wxRIGHT, 10);
-    m_cmdWord2Sizer->Add(new wxStaticText(this, wxID_ANY, "SA2:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); m_cmdWord2Sizer->Add(m_sa2Combo, 0, wxRIGHT, 10);
+    m_saLabel = new wxStaticText(this, wxID_ANY, "SA:");
+    topSizer->Add(m_saLabel, 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); 
+    topSizer->Add(m_saCombo, 0, wxRIGHT, 10);
+    topSizer->Add(new wxStaticText(this, wxID_ANY, "WC:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); 
+    topSizer->Add(m_wcCombo, 0, wxRIGHT, 10);
+    
+    m_cmdWord2Sizer->Add(new wxStaticText(this, wxID_ANY, "RT2:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); 
+    m_cmdWord2Sizer->Add(m_rt2Combo, 0, wxRIGHT, 10);
+    m_cmdWord2Sizer->Add(new wxStaticText(this, wxID_ANY, "SA2:"), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5); 
+    m_cmdWord2Sizer->Add(m_sa2Combo, 0, wxRIGHT, 10);
 
     labelSizer->Add(new wxStaticText(this, wxID_ANY, "Label: "), 0, wxALIGN_CENTER_VERTICAL|wxRIGHT, 5);
     labelSizer->Add(m_labelTextCtrl, 1, wxEXPAND);
@@ -71,14 +78,14 @@ void FrameCreationFrame::createAndLayoutControls() {
     bottomSizer->Add(closeButton, 0, wxALL, 5);
     bottomSizer->Add(m_saveButton, 0, wxALL, 5);
 
-    m_mainSizer->Add(topSizer, 0, wxEXPAND | wxALL, 5);
-    m_mainSizer->Add(m_cmdWord2Sizer, 0, wxEXPAND | wxALL, 5);
-    m_mainSizer->Add(new wxStaticText(this, wxID_ANY, "Data (Hex):"), 0, wxLEFT|wxTOP, 10);
-    m_mainSizer->Add(dataGridSizer, 0, wxEXPAND | wxALL, 10);
-    m_mainSizer->Add(labelSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
-    m_mainSizer->Add(bottomSizer, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(topSizer, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(m_cmdWord2Sizer, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(new wxStaticText(this, wxID_ANY, "Data (Hex):"), 0, wxLEFT|wxTOP, 10);
+    mainSizer->Add(dataGridSizer, 0, wxEXPAND | wxALL, 10);
+    mainSizer->Add(labelSizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    mainSizer->Add(bottomSizer, 0, wxEXPAND | wxALL, 5);
 
-    SetSizerAndFit(m_mainSizer);
+    SetSizerAndFit(mainSizer);
     Centre();
   
     Bind(wxEVT_BUTTON, &FrameCreationFrame::onSave, this, wxID_SAVE);
@@ -107,7 +114,13 @@ FrameConfig FrameCreationFrame::buildConfigFromFields() {
     for (size_t i = 0; i < data.size(); ++i) { data.at(i) = m_dataTextCtrls.at(i)->GetValue().ToStdString(); }
     std::string label = m_labelTextCtrl->GetValue().ToStdString();
     if (label.empty()) { label = "Untitled Frame"; }
-    return { label, m_busCombo->GetValue().ToStdString()[0], wxAtoi(m_rtCombo->GetValue()), wxAtoi(m_saCombo->GetValue()), wxAtoi(m_rt2Combo->GetValue()), wxAtoi(m_sa2Combo->GetValue()), wxAtoi(m_wcCombo->GetValue()), static_cast<BcMode>(m_modeCombo->GetSelection()), data };
+    long rt, sa, rt2, sa2, wc;
+    m_rtCombo->GetValue().ToLong(&rt);
+    m_saCombo->GetValue().ToLong(&sa);
+    m_rt2Combo->GetValue().ToLong(&rt2);
+    m_sa2Combo->GetValue().ToLong(&sa2);
+    m_wcCombo->GetValue().ToLong(&wc);
+    return { label, m_busCombo->GetValue().ToStdString()[0], (int)rt, (int)sa, (int)rt2, (int)sa2, (int)wc, static_cast<BcMode>(m_modeCombo->GetSelection()), data };
 }
 
 void FrameCreationFrame::onSave(wxCommandEvent &) {
@@ -125,15 +138,23 @@ void FrameCreationFrame::updateControlStates() {
     BcMode currentMode = static_cast<BcMode>(m_modeCombo->GetSelection());
     bool isRtToRt = (currentMode == BcMode::RT_TO_RT);
     bool isMc = (currentMode == BcMode::MODE_CODE_NO_DATA || currentMode == BcMode::MODE_CODE_WITH_DATA);
+    
     m_cmdWord2Sizer->ShowItems(isRtToRt);
+    m_saLabel->SetLabel(isMc ? "MC:" : "SA:");
     m_wcCombo->Enable(!isMc);
-    bool dataEnabled = (currentMode == BcMode::BC_TO_RT || currentMode == BcMode::RT_TO_BC || currentMode == BcMode::RT_TO_RT || currentMode == BcMode::MODE_CODE_WITH_DATA);
-    int wc = isMc ? 1 : wxAtoi(m_wcCombo->GetValue());
+    
+    bool dataEnabled = (currentMode != BcMode::MODE_CODE_NO_DATA);
+    long wc_long = 0;
+    m_wcCombo->GetValue().ToLong(&wc_long);
+    int wc = isMc ? 1 : (int)wc_long;
     if (wc == 0 && !isMc) wc = 32;
+
     for (size_t i = 0; i < m_dataTextCtrls.size(); ++i) {
         m_dataTextCtrls[i]->Enable(dataEnabled && (i < (size_t)wc));
     }
-    Layout(); Fit();
+    
+    GetSizer()->Layout();
+    Fit();
 }
 
 void FrameCreationFrame::onRandomize(wxCommandEvent &) {

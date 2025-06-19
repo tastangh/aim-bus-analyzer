@@ -1,9 +1,10 @@
+// fileName: frameComponent.hpp
 #pragma once
 
-#include "../../common.hpp"
-#include "Api1553.h"
-#include <wx/tglbtn.h>
+#include "common.hpp"
+#include "AiOs.h"
 #include <wx/wx.h>
+#include <wx/tglbtn.h>
 
 class BusControllerFrame;
 
@@ -14,7 +15,7 @@ public:
   void sendFrame();
   bool isActive() const;
   const FrameConfig &getFrameConfig() const { return m_config; }
-  void updateData(const std::array<AiUInt16, BC_MAX_DATA_WORDS> &newData);
+  void updateDataUI(const std::array<AiUInt16, BC_MAX_DATA_WORDS> &newData);
 
 private:
   void onSend(wxCommandEvent &event);

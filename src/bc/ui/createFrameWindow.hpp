@@ -1,11 +1,13 @@
+// fileName: createFrameWindow.hpp
 #pragma once
 
-#include "../../common.hpp"
+#include "common.hpp"
 #include <wx/wx.h>
+#include <wx/combobox.h>
 #include <vector>
 
-class FrameComponent;
 class BusControllerFrame;
+class FrameComponent;
 
 class FrameCreationFrame : public wxFrame {
 public:
@@ -25,7 +27,6 @@ private:
 
   BusControllerFrame *m_parentFrame;
   FrameComponent *m_editingFrame = nullptr;
-  wxBoxSizer *m_mainSizer{};
   wxBoxSizer *m_cmdWord2Sizer{};
   wxButton *m_saveButton{};
   wxComboBox *m_busCombo{};
@@ -37,4 +38,5 @@ private:
   wxComboBox *m_modeCombo{};
   wxTextCtrl *m_labelTextCtrl{};
   std::vector<wxTextCtrl *> m_dataTextCtrls;
+  wxStaticText* m_saLabel{};
 };

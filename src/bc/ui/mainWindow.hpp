@@ -1,11 +1,15 @@
+// fileName: mainWindow.hpp
 #pragma once
 
 #include "common.hpp"
-#include <atomic>
-#include <thread>
-#include <vector>
-#include <wx/tglbtn.h>
 #include <wx/wx.h>
+#include <wx/tglbtn.h>
+#include <wx/scrolwin.h>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <future>
+#include <memory> // DÜZELTME: std::shared_ptr için eklendi
 
 class FrameComponent;
 
@@ -23,29 +27,24 @@ public:
   void updateListLayout();
 
 private:
-  // --- Event Handlers ---
   void onAddFrameClicked(wxCommandEvent &event);
   void onClearFramesClicked(wxCommandEvent &event);
   void onRepeatToggle(wxCommandEvent &event);
   void onSendActiveFramesToggle(wxCommandEvent &event);
-  void onLoadFrames(wxCommandEvent &event);
-  void onSaveFrames(wxCommandEvent &event);
   void onExit(wxCommandEvent &event);
   void onCloseFrame(wxCloseEvent &event);
 
-  // --- Thread & Send Logic ---
   void sendActiveFramesLoop();
   void startSendingThread();
   void stopSendingThread();
 
-  // --- UI Components ---
   wxTextCtrl *m_deviceIdTextInput;
   wxToggleButton *m_repeatToggle;
   wxToggleButton *m_sendActiveFramesToggle;
   wxScrolledWindow *m_scrolledWindow;
   wxBoxSizer *m_scrolledSizer;
 
-  // --- State Management ---
   std::thread m_sendThread;
   std::atomic<bool> m_isSending{false};
+  std::vector<FrameComponent*> m_frameComponents;
 };
