@@ -42,9 +42,9 @@ void FrameCreationFrame::createAndLayoutControls() {
     m_busCombo = new wxComboBox(this, wxID_ANY, "A", wxDefaultPosition, wxDefaultSize, 2, busOptions, wxCB_READONLY);
     m_rtCombo = new wxComboBox(this, wxID_ANY, "1", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
     m_rt2Combo = new wxComboBox(this, wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
-    m_saCombo = new wxComboBox(this, wxID_ANY, "1", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
+    m_saCombo = new wxComboBox(this, wxID_ANY, "2", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
     m_sa2Combo = new wxComboBox(this, wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
-    m_wcCombo = new wxComboBox(this, wxID_ANY, "1", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
+    m_wcCombo = new wxComboBox(this, wxID_ANY, "0", wxDefaultPosition, wxDefaultSize, rtSaWcOptions, wxCB_READONLY);
     m_modeCombo = new wxComboBox(this, wxID_ANY, modeOptions[0], wxDefaultPosition, wxDefaultSize, 5, modeOptions, wxCB_READONLY);
     m_labelTextCtrl = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, 0);
     m_labelTextCtrl->SetHint("Set frame label");
