@@ -139,7 +139,7 @@ AiReturn BusController::sendAcyclicFrame(const FrameComponent* frame, std::array
     std::cout << "[BC::send] '"<< config.label <<"' gönderiliyor. Kullanılan ID'ler -> XFER: " << transferId << ", HDR: " << headerId << ", BUF: " << bufferId << std::endl;
 
     AiReturn ret;
-    bool hasDataField = (config.mode == BcMode::BC_TO_RT || config.mode == BcMode::MODE_CODE_WITH_DATA);
+    bool hasDataField = (config.mode == BcMode::BC_TO_RT || config.mode == BcMode::RT_TO_RT || config.mode == BcMode::MODE_CODE_WITH_DATA);
     int wc_to_process = (config.wc == 0 && config.mode != BcMode::MODE_CODE_NO_DATA) ? 32 : config.wc;
     if (config.mode == BcMode::MODE_CODE_WITH_DATA) wc_to_process = 1;
 

@@ -116,7 +116,7 @@ void FrameComponent::sendFrame() {
     }
     wxTheApp->CallAfter([this]{ m_mainWindow->setStatusText("Sending: " + m_config.label); });
     std::array<AiUInt16, BC_MAX_DATA_WORDS> received_data;
-    AiReturn status = bc.sendAcyclicFrame(this, received_data);
+    AiReturn status = bc.sendAcyclicFrame(this, receaived_data);
     if (status != API_OK) {
         std::string errMsg = "Error sending frame '" + m_config.label + "': " + std::string(bc.getAIMError(status));
         wxTheApp->CallAfter([this, errMsg]{ m_mainWindow->setStatusText(errMsg); });
