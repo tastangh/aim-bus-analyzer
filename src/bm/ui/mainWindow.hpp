@@ -19,7 +19,6 @@ enum {
   ID_LOG_TO_FILE_CHECKBOX
 };
 
-const int TOP_BAR_COMP_HEIGHT = 28;
 
 class BusMonitorFrame : public wxFrame {
 public:
