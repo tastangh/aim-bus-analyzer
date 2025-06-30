@@ -1,146 +1,157 @@
-#include "Api1553.h"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h> // sleep fonksiyonu için (Linux/macOS)
-// #include <windows.h> // Sleep fonksiyonu için (Windows)
+// fileName: rt.cpp
+#include "rt.hpp"
+#include "frameComponent.hpp" 
+#include <cstring>
+#include <iostream>
+#include <array>
 
-// Hata kontrolü için yardımcı fonksiyon
-void check_api_status(AiReturn status_code, const char* operation_name) {
-    if (status_code != API_OK) {
-        char error_message_buffer[256];
-        const char* msg_ptr = ApiGetErrorMessage(status_code);
-        if (msg_ptr) {
-            snprintf(error_message_buffer, sizeof(error_message_buffer), "%s", msg_ptr);
-        } else {
-            snprintf(error_message_buffer, sizeof(error_message_buffer), "Bilinmeyen hata kodu, mesaj mevcut değil.");
-        }
-        fprintf(stderr, "RT HATA: %s basarisiz oldu! Kod: %d, Mesaj: %s\n",
-                operation_name, status_code, error_message_buffer);
-        exit(1);
-    } else {
-        printf("RT BASARILI: %s\n", operation_name);
-    }
+RemoteTerminal& RemoteTerminal::getInstance() {
+    static RemoteTerminal instance;
+    return instance;
 }
 
-int main() {
-    AiReturn api_status;
-    AiUInt32 rt_module_handle = 0;
-    AiUInt8 rt_biu_selection = API_BIU_1; // ApiOpenEx sonrası genellikle önemsiz
-    const AiUInt8 RT_ADDRESS = 5;
-    const AiUInt8 SUBADDRESS_RECEIVE = 1;
+RemoteTerminal::~RemoteTerminal() {
+    shutdown();
+}
 
-    printf("MIL-STD-1553 RT Uygulamasi Baslatiliyor...\n");
+AiReturn RemoteTerminal::start(int deviceId, int rtAddress, int streamId) {
+    std::lock_guard<std::mutex> lock(m_apiMutex);
+    if (m_isRunning) return API_OK;
+    
+    m_deviceId = deviceId;
+    m_rtAddress = rtAddress;
 
-    // 1. API Kütüphanesini Başlat
-    api_status = ApiInit();
-    if (api_status <= 0) {
-        fprintf(stderr, "RT HATA: ApiInit basarisiz oldu veya kart bulunamadi. Donus Kodu: %d\n", api_status);
-         if (api_status < 0) check_api_status(api_status, "ApiInit (Hata Durumu)");
-        return 1;
+    if (ApiInit() < 1) return API_ERR;
+
+    TY_API_OPEN api_open_params;
+    memset(&api_open_params, 0, sizeof(api_open_params));
+    api_open_params.ul_Module = m_deviceId;
+    api_open_params.ul_Stream = streamId;
+    strncpy(api_open_params.ac_SrvName, "local", sizeof(api_open_params.ac_SrvName) - 1);
+    
+    AiReturn ret = ApiOpenEx(&api_open_params, &m_boardHandle);
+    if (ret != API_OK) return ret;
+    
+    TY_API_RESET_INFO reset_info;
+    ret = ApiCmdReset(m_boardHandle, m_biuId, API_RESET_ALL, &reset_info);
+    if (ret != API_OK) return ret;
+
+    // Donanımın hafıza yapılandırmasını ve limitlerini oku
+    TY_API_GET_MEM_INFO memInfo;
+    memset(&memInfo, 0, sizeof(memInfo));
+    ret = ApiCmdSysGetMemPartition(m_boardHandle, 0, &memInfo);
+    if (ret != API_OK) {
+        std::cerr << "Error: Could not get memory partition info from the board." << std::endl;
+        return ret;
     }
-    printf("RT BASARILI: ApiInit - %d kart bulundu.\n", api_status);
+    
+    // DÜZELTME: Hatalı `` işaretçisi kaldırıldı.
+    // Kullanabileceğimiz maksimum RT ve BC başlık ID'lerini sakla
+    m_maxRtHeaderId = memInfo.ax_BiuCnt[m_biuId].ul_RtBhArea;
+    m_maxBcHeaderId = memInfo.ax_BiuCnt[m_biuId].ul_BcBhArea;
+    std::cout << "[RT] Max RT HIDs: " << m_maxRtHeaderId << ", Max BC HIDs: " << m_maxBcHeaderId << std::endl;
 
-    // 2. RT Stream'ini Aç
-    TY_API_OPEN rt_open_params;
-    memset(&rt_open_params, 0, sizeof(TY_API_OPEN));
-    rt_open_params.ul_Module = 0;       // Aynı kart
-    rt_open_params.ul_Stream = 2;       // RT için Stream 2
-    strcpy(rt_open_params.ac_SrvName, "local");
+    if (m_maxBcHeaderId < 1 || m_maxRtHeaderId < 1) {
+        std::cerr << "Error: Board configuration does not allow for any buffer headers." << std::endl;
+        return API_ERR;
+    }
 
-    api_status = ApiOpenEx(&rt_open_params, &rt_module_handle);
-    check_api_status(api_status, "ApiOpenEx (RT Stream)");
+    ret = ApiCmdRTIni(m_boardHandle, m_biuId, m_rtAddress, API_RT_ENABLE_SIMULATION, API_RT_RSP_BOTH_BUSSES, 12.0f, 0);
+    if (ret != API_OK) return ret;
+    
+    ret = ApiCmdBCIni(m_boardHandle, m_biuId, API_DIS, API_DIS, API_TBM_TRANSFER, 0);
+    if (ret != API_OK) return ret;
 
-    // 3. RT BIU'sunu Sıfırla
-    TY_API_RESET_INFO rt_reset_info;
-    api_status = ApiCmdReset(rt_module_handle, rt_biu_selection, API_RESET_ALL, &rt_reset_info);
-    check_api_status(api_status, "ApiCmdReset (RT BIU)");
+    ret = ApiCmdRTStart(m_boardHandle, m_biuId);
+    if (ret != API_OK) return ret;
+    
+    m_isRunning = true;
+    return API_OK;
+}
 
-    // 4. RT'yi Başlat (RT 5)
-    api_status = ApiCmdRTIni(rt_module_handle, rt_biu_selection,
-                             RT_ADDRESS,
-                             API_RT_ENABLE_SIMULATION,
-                             API_RT_RSP_BOTH_BUSSES, // Her iki veriyolundan da yanıt ver
-                             8.0f,                   // Yanıt süresi (örneğin 8µs)
-                             (RT_ADDRESS << 11)      // nxw: Sonraki durum kelimesi (sadece RT adresi)
-                            );
-    check_api_status(api_status, "ApiCmdRTIni (RT 5 icin)");
+void RemoteTerminal::shutdown() {
+    std::lock_guard<std::mutex> lock(m_apiMutex);
+    if (!m_isRunning) return;
+    if (m_boardHandle != 0) {
+        ApiCmdBCHalt(m_boardHandle, m_biuId);
+        ApiCmdRTHalt(m_boardHandle, m_biuId);
+        ApiClose(m_boardHandle);
+        m_boardHandle = 0;
+    }
+    ApiExit();
+    m_isRunning = false;
+}
 
-    // 5. RT Arabellek Başlığını Tanımla (Receive SA 1 için)
-    TY_API_RT_BH_INFO rt_bh_info_sa1;
-    memset(&rt_bh_info_sa1, 0, sizeof(TY_API_RT_BH_INFO));
-    const AiUInt16 RT_RECEIVE_HID = 101; // BC'deki hid'den farklı olabilir, RT kendi başlıklarını yönetir
-    const AiUInt16 RT_RECEIVE_BID = 101; // RT'nin veriyi saklayacağı arabellek ID'si
+bool RemoteTerminal::isRunning() const { return m_isRunning; }
+const char* RemoteTerminal::getAIMError(AiReturn ret) { return ApiGetErrorMessage(ret); }
 
-    api_status = ApiCmdRTBHDef(rt_module_handle, rt_biu_selection,
-                               RT_RECEIVE_HID, RT_RECEIVE_BID,
-                               0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC, 0, 0, 0, 0,
-                               &rt_bh_info_sa1);
-    check_api_status(api_status, "ApiCmdRTBHDef (RT5, SA1 Alim Basligi)");
+AiReturn RemoteTerminal::defineFrameAsSubaddress(FrameComponent* component) {
+    std::lock_guard<std::mutex> lock(m_apiMutex);
+    if (!m_isRunning || !component) return API_ERR;
 
-    // 6. RT Subaddress'ini (SA 1) Alıcı Olarak Yapılandır
-    api_status = ApiCmdRTSACon(rt_module_handle, rt_biu_selection,
-                               RT_ADDRESS,
-                               SUBADDRESS_RECEIVE,
-                               RT_RECEIVE_HID, // Yukarıda tanımlanan RT arabellek başlığı
-                               API_RT_TYPE_RECEIVE_SA,
-                               API_RT_ENABLE_SA, // SA'yı etkinleştir, kesme yok
-                               0,                // rmod
-                               API_RT_SWM_OR,    // smod
-                               (RT_ADDRESS << 11) // swm: Varsayılan durum kelimesi
-                              );
-    check_api_status(api_status, "ApiCmdRTSACon (RT5, SA1 Receive)");
+    // Yeni ID atamadan önce limitleri kontrol et
+    if (component->getAimHeaderId() == 0 && m_nextHeaderId >= m_maxRtHeaderId) {
+        // DÜZELTME: Hatalı sabit kod, derleyicinin önerdiği doğru kod ile değiştirildi.
+        return API_ERR_MAXIMUM; // Maksimum enstans/kaynak sayısına ulaşıldı.
+    }
+    
+    const FrameConfig& config = component->getConfig();
 
-    // 7. RT Operasyonunu Başlat
-    api_status = ApiCmdRTStart(rt_module_handle, rt_biu_selection);
-    check_api_status(api_status, "ApiCmdRTStart");
+    if (component->getAimHeaderId() == 0) {
+        AiUInt16 hid = m_nextHeaderId++;
+        AiUInt16 bid = m_nextBufferId++;
+        component->setAimIds(hid, bid);
 
-    printf("RT %d, SA %d alim icin dinlemede...\n", RT_ADDRESS, SUBADDRESS_RECEIVE);
+        TY_API_RT_BH_INFO bh_info;
+        AiReturn ret = ApiCmdRTBHDef(m_boardHandle, m_biuId, hid, bid, 0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC, 0, 0, 0, 0, &bh_info);
+        if (ret != API_OK) return ret;
+    }
 
-    // Gelen veriyi periyodik olarak kontrol edip yazdıralım
-    AiUInt16 received_data[32];
-    TY_API_RT_SA_MSG_DSP rt_sa_msg_status;
+    AiUInt16 dataWords[32];
+    int wordCount = (config.wc == 0) ? 32 : config.wc;
+    for (int i = 0; i < wordCount; ++i) {
+        try { dataWords[i] = static_cast<AiUInt16>(std::stoul(config.data[i], nullptr, 16)); } catch (...) { dataWords[i] = 0; }
+    }
+    
+    AiUInt16 rid;
+    AiUInt32 raddr;
+    AiReturn ret = ApiCmdBufDef(m_boardHandle, m_biuId, API_BUF_RT_MSG, component->getAimHeaderId(), 0, wordCount, dataWords, &rid, &raddr);
+    if (ret != API_OK) return ret;
 
-    for (int i = 0; i < 10; ++i) { // 10 saniye boyunca kontrol et
-        sleep(1); // 1 saniye bekle
+    AiUInt8 sa_con = config.enabled ? API_RT_ENABLE_SA : API_RT_DISABLE_SA;
+    ret = ApiCmdRTSACon(m_boardHandle, m_biuId, m_rtAddress, config.sa, component->getAimHeaderId(), API_RT_TYPE_TRANSMIT_SA, sa_con, 0, 0, 0);
 
-        // SA 1 için mesaj durumunu oku
-        // ApiCmdRTSAMsgRead prototipi: (ul_ModuleHandle, biu, rt_addr, sa, sa_type, clr, *psa_dsp)
-        api_status = ApiCmdRTSAMsgRead(rt_module_handle, rt_biu_selection,
-                                       RT_ADDRESS, SUBADDRESS_RECEIVE, API_RT_TYPE_RECEIVE_SA,
-                                       1, // clr: Durum bitlerini oku ve temizle (1)
-                                       &rt_sa_msg_status);
-        if (api_status == API_OK) {
-            // trw (Transfer Report Word) BUF_STAT alanını kontrol et
-            // BUF_STAT: 0 = Not Used, 1 = Full, 2 = Empty
-            if ((rt_sa_msg_status.trw & 0x00E0) >> 5 == API_BUF_FULL) { // BUF_STAT'ı izole et
-                printf("RT: SA %d'den veri alindi. Buffer ID: %d\n", SUBADDRESS_RECEIVE, rt_sa_msg_status.bid);
+    return ret;
+}
 
-                // Arabellekten veriyi oku
-                api_status = ApiCmdBufRead(rt_module_handle, rt_biu_selection,
-                                           API_BUF_RT_MSG,       // bt: RT mesaj arabelleği
-                                           RT_RECEIVE_HID,       // hid: Arabellek Başlık ID'si
-                                           rt_sa_msg_status.bid, // bid: Okunacak arabellek ID'si
-                                           2,                    // len: Okunacak kelime sayısı
-                                           received_data,        // data
-                                           NULL, NULL            // rid, raddr (çıkış, burada gerekmiyor)
-                                          );
-                check_api_status(api_status, "ApiCmdBufRead (RT Veri Okuma)");
-                printf("RT: Alinan veri[0]: 0x%04X, Alinan veri[1]: 0x%04X\n", received_data[0], received_data[1]);
-            }
-        } else if (api_status != API_ERR_QUEUE_EMPTY) { // Kuyruk boş hatası normalse, diğerlerini raporla
-             check_api_status(api_status, "ApiCmdRTSAMsgRead");
+AiReturn RemoteTerminal::testTransmitSubaddress(const FrameComponent* component) {
+    std::lock_guard<std::mutex> lock(m_apiMutex);
+    if (!m_isRunning || !component) return API_ERR;
+
+    if (m_testBcHeaderId == 0) {
+        m_testBcHeaderId = m_maxBcHeaderId - 1;
+        m_testBcBufferId = m_maxBcHeaderId - 1;
+        TY_API_BC_BH_INFO test_bh_info;
+        AiReturn ret = ApiCmdBCBHDef(m_boardHandle, m_biuId, m_testBcHeaderId, m_testBcBufferId, 0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC, 0, 0, 0, 0, &test_bh_info);
+        if (ret != API_OK) {
+            m_testBcHeaderId = 0; 
+            return ret;
         }
     }
 
-    // 8. RT Operasyonunu Durdur
-    api_status = ApiCmdRTHalt(rt_module_handle, rt_biu_selection);
-    check_api_status(api_status, "ApiCmdRTHalt");
+    const auto& config = component->getConfig();
 
-    // 9. RT Stream'ini Kapat
-    api_status = ApiClose(rt_module_handle);
-    check_api_status(api_status, "ApiClose (RT Stream)");
+    TY_API_BC_XFER xfer;
+    memset(&xfer, 0, sizeof(xfer));
+    xfer.xid = m_testBcHeaderId; 
+    xfer.hid = m_testBcHeaderId;
+    xfer.type = API_BC_TYPE_RTBC;
+    xfer.chn = (config.bus == 'A') ? API_BC_XFER_BUS_PRIMARY : API_BC_XFER_BUS_SECONDARY;
+    xfer.xmt_rt = config.rt;
+    xfer.xmt_sa = config.sa;
+    xfer.wcnt = config.wc;
 
-    printf("MIL-STD-1553 RT Uygulamasi Tamamlandi.\n");
-    return 0;
+    std::array<AiUInt16, 32> receivedData;
+    TY_API_BC_XFER_DSP transfer_status;
+    return ApiCmdBCAcycPrepAndSendTransferBlocking(m_boardHandle, m_biuId, &xfer, receivedData.data(), &transfer_status);
 }
