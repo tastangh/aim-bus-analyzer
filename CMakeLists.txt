@@ -10,3 +10,6 @@ add_subdirectory(src/bc/)
 
 # RT Emulator
  add_subdirectory(src/rt/)
+
+ # bcRtBm 
+ add_subdirectory(src/bcRtBm/)

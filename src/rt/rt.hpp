@@ -1,46 +1,55 @@
 // fileName: rt.hpp
 #pragma once
 
-#include "app.hpp"
-#include "Api1553.h"
 #include <atomic>
-#include <mutex>
+#include <string>
+#include <memory>
 
-class FrameComponent;
+// AIM Kütüphanesi
+#include "Api1553.h"
 
-class RemoteTerminal {
+// spdlog kütüphanesi için ileriye dönük bildirim (forward declaration)
+namespace spdlog {
+    class logger;
+}
+
+class TerminalRT {
 public:
-    static RemoteTerminal& getInstance();
-    RemoteTerminal(const RemoteTerminal&) = delete;
-    void operator=(const RemoteTerminal&) = delete;
+    // Yapıcı ve yıkıcı fonksiyonlar
+    TerminalRT(int deviceId, int rtAddress, int transmitSa);
+    ~TerminalRT();
 
-    AiReturn start(int deviceId, int rtAddress, int streamId = 1);
-    void shutdown();
-    bool isRunning() const;
+    // Donanımı başlatır ve RT'yi yapılandırır
+    bool initialize();
 
-    AiReturn defineFrameAsSubaddress(FrameComponent* component);
-    AiReturn testTransmitSubaddress(const FrameComponent* component);
+    // Veri tamponunu periyodik olarak güncelleyen ana döngü
+    void run();
 
-    static const char* getAIMError(AiReturn ret);
+    // Simülasyonu güvenli bir şekilde durdurur
+    void stop();
 
 private:
-    RemoteTerminal() = default;
-    ~RemoteTerminal();
+    // Donanım kaynaklarını serbest bırakan fonksiyon
+    void shutdown();
 
-    std::mutex m_apiMutex;
-    std::atomic<bool> m_isRunning{false};
-    AiUInt32 m_boardHandle = 0;
-    int m_deviceId = 0;
-    int m_rtAddress = 0;
-    const int m_biuId = 0;
+    // Hata kontrolü için yardımcı fonksiyon
+    bool checkError(AiReturn ret, const std::string& functionName);
 
-    AiUInt32 m_nextHeaderId = 1;
-    AiUInt32 m_nextBufferId = 1;
+    // Sınıf üyeleri
+    int m_deviceId;
+    int m_rtAddress;
+    int m_transmitSa;
+    const int m_wordCount = 32;
     
-    // YENİ: Donanımdan okunan maksimum ID'leri saklamak için
-    AiUInt32 m_maxRtHeaderId = 0;
-    AiUInt32 m_maxBcHeaderId = 0;
+    AiUInt32 m_boardHandle;
+    const int m_biuId = 1;
 
-    AiUInt16 m_testBcHeaderId = 0;
-    AiUInt16 m_testBcBufferId = 0;
+    // Bu tek alt adres için sabit donanım ID'leri
+    const AiUInt16 m_headerId = 1;
+    const AiUInt16 m_bufferId = 1;
+
+    std::atomic<bool> m_isRunning;
+    
+    // spdlog için logger nesnesi
+    std::shared_ptr<spdlog::logger> m_logger;
 };
