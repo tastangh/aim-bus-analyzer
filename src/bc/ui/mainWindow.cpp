@@ -62,7 +62,6 @@ BusControllerFrame::~BusControllerFrame() {
   stopSendingThread();
 }
 
-// ... addFrameToList, updateFrame, removeFrame, onAddFrameClicked, onClearFramesClicked, onRepeatToggle aynı kalacak ...
 void BusControllerFrame::addFrameToList(FrameConfig config) {
     std::cout << "[UI] Yeni çerçeve ekleniyor: " << config.label << std::endl;
     auto& bc = BusController::getInstance();
@@ -127,20 +126,15 @@ void BusControllerFrame::onRepeatToggle(wxCommandEvent &) {
 }
 
 
-// --- DEĞİŞİKLİKLER BU BÖLÜMDE ---
-
 void BusControllerFrame::onSendActiveFramesToggle(wxCommandEvent &event) {
   if (m_sendActiveFramesToggle->GetValue()) {
-    // DÜZELTME: Gönderim zaten aktifse tekrar başlatma
     if (m_isSending) return; 
     
-    // DÜZELTME: Butonu hemen devre dışı bırakıp etiketini değiştirerek çift tıklamayı önle
     m_sendActiveFramesToggle->SetLabel("Sending...");
     m_sendActiveFramesToggle->Disable();
     startSendingThread();
   } else {
-    // Butona tekrar basıldığında (durdurma isteği)
-    m_sendActiveFramesToggle->Disable(); // Durdurma işlemi bitene kadar butonu kilitle
+    m_sendActiveFramesToggle->Disable(); 
     stopSendingThread();
   }
 }
@@ -148,33 +142,28 @@ void BusControllerFrame::onSendActiveFramesToggle(wxCommandEvent &event) {
 void BusControllerFrame::startSendingThread() {
   if (m_isSending) return;
   m_isSending = true;
-  // Thread bittiğinde dahi join edilebilir kalması için detach yerine join kullanacağız.
   m_sendThread = std::thread(&BusControllerFrame::sendActiveFramesLoop, this);
 }
 
 void BusControllerFrame::stopSendingThread() {
-  // Sinyali gönder
   m_isSending = false;
 
-  // Thread'in bitmesini bekle
   if (m_sendThread.joinable()) {
     m_sendThread.join();
   }
   
-  // DÜZELTME: Arayüz güncellemelerini her zaman wxTheApp->CallAfter ile yap
-  // Bu, worker thread'den çağrıldığında bile güvenli olmasını sağlar.
+
   wxTheApp->CallAfter([this] {
-    if(this) { // Pencerenin hala var olduğundan emin ol
-        m_sendActiveFramesToggle->SetValue(false); // Butonun durumunu 'kapalı' yap
+    if(this) { 
+        m_sendActiveFramesToggle->SetValue(false); 
         m_sendActiveFramesToggle->SetLabel("Send Active Frames");
-        m_sendActiveFramesToggle->Enable(); // Butonu tekrar aktif et
+        m_sendActiveFramesToggle->Enable(); 
         setStatusText("Sending stopped.");
     }
   });
 }
 
 void BusControllerFrame::sendActiveFramesLoop() {
-    // Aktif çerçeveleri UI thread'inden güvenli bir şekilde al
     auto promise_ptr = std::make_shared<std::promise<std::vector<FrameComponent*>>>();
     std::future<std::vector<FrameComponent*>> future = promise_ptr->get_future();
     wxTheApp->CallAfter([this, promise_ptr]() {
@@ -190,7 +179,6 @@ void BusControllerFrame::sendActiveFramesLoop() {
     if (!bc.isInitialized()) {
         AiReturn ret = bc.initialize(getDeviceId());
         if (ret != API_OK) {
-            // DÜZELTME: Hata mesajı sonrası durdurma işlemini UI thread'ine bırak
             wxTheApp->CallAfter([this, ret]{ 
                 wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); 
                 stopSendingThread(); 
@@ -207,31 +195,26 @@ void BusControllerFrame::sendActiveFramesLoop() {
         return;
     }
     
-    // Ana gönderim döngüsü
     do {
         for (FrameComponent* frame : activeFrames) {
-            if (!m_isSending) break; // Her çerçeve öncesi durdurma sinyalini kontrol et
+            if (!m_isSending) break;
             frame->sendFrame();
             std::this_thread::sleep_for(std::chrono::milliseconds(20));
         }
-        if (!m_isSending) break; // Döngü tekrar etmeden önce son bir kez daha kontrol et
-        
-        // Tekrar modu aktifse, bir sonraki döngü için bekle
+        if (!m_isSending) break; 
+
         if (m_repeatToggle->GetValue()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(BC_FRAME_TIME_MS));
         }
     } while (m_isSending && m_repeatToggle->GetValue());
 
-    // DÜZELTME (ANA ÇÖZÜM): Thread işini bitirince, kendi kendini durdurmaya çalışmak yerine
-    // durdurma ve temizleme işini ana GUI thread'ine havale et.
     wxTheApp->CallAfter([this] {
-        if (m_isSending) { // Eğer kullanıcı butona basarak durdurmadıysa, biz durduralım
+        if (m_isSending) { 
            stopSendingThread();
         }
     });
 }
 
-// ... updateListLayout, setStatusText, getDeviceId, onExit, onCloseFrame aynı kalacak ...
 void BusControllerFrame::updateListLayout() {
   m_scrolledSizer->Layout();
   m_scrolledWindow->FitInside();

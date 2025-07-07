@@ -7,7 +7,7 @@
 #include <atomic>
 #include <mutex>
 
-class FrameComponent; // Forward declaration
+class FrameComponent;
 
 class BusController {
 public:

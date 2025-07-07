@@ -18,7 +18,7 @@ public:
   BusControllerFrame();
   ~BusControllerFrame();
 
-  void addFrameToList(FrameConfig config); // Değişiklik yapılabilmesi için by-value
+  void addFrameToList(FrameConfig config); 
   void removeFrame(FrameComponent* frame);
   void updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig);
   

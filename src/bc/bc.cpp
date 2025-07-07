@@ -80,7 +80,6 @@ const char* BusController::getAIMError(AiReturn ret) { return ApiGetErrorMessage
 
 AiReturn BusController::defineFrameResources(FrameComponent* frame) {
     std::lock_guard<std::mutex> lock(m_apiMutex);
-    // DÜZELTME: Tanımlı olmayan hata kodu API_ERR ile değiştirildi.
     if (!frame) return API_ERR; 
     if (frame->getAimTransferId() != 0) {
         std::cout << "[BC::define] '" << frame->getFrameConfig().label << "' için kaynaklar zaten tanımlı." << std::endl;
@@ -128,7 +127,6 @@ AiReturn BusController::sendAcyclicFrame(const FrameComponent* frame, std::array
     if (!m_isInitialized || !frame) return API_ERR;
     if (frame->getAimTransferId() == 0) {
         std::cerr << "[BC::send] HATA: Çerçeve kaynakları tanımlanmamış!" << std::endl;
-        // DÜZELTME: Tanımlı olmayan hata kodu API_ERR ile değiştirildi.
         return API_ERR; 
     }
 

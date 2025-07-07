@@ -6,9 +6,6 @@
 #include <string>
 #include <wx/arrstr.h> 
 
-
-// Event table for connecting UI events to their handler functions.
-// This is a classic wxWidgets approach for event handling.
 wxBEGIN_EVENT_TABLE(BusMonitorFrame, wxFrame)
     EVT_MENU(ID_ADD_MENU, BusMonitorFrame::onStartStopClicked)
     EVT_BUTTON(ID_ADD_BTN, BusMonitorFrame::onStartStopClicked)
@@ -57,10 +54,6 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     auto *clearButton = new wxButton(this, ID_CLEAR_BTN, "Clear", wxDefaultPosition, wxSize(-1, TOP_BAR_COMP_HEIGHT));
     m_logToFileCheckBox = new wxCheckBox(this, ID_LOG_TO_FILE_CHECKBOX, "Log to File"); 
 
-    // --- Tree View Initialization ---
-    // The tree is pre-populated from the MilStd1553 data model.
-    // Each visual item's wxTreeItemId is stored back into the model,
-    // allowing for efficient reverse lookups later (finding the model item from a clicked tree item).
     m_milStd1553Tree = new wxTreeCtrl(this, ID_RT_SA_TREE, wxDefaultPosition, wxSize(200, -1), wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT); 
     auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses"); 
     for (size_t i = 0; i < MilStd1553::getInstance().busList.size(); ++i) {
@@ -111,9 +104,6 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
     CreateStatusBar();
     SetStatusText("Ready, press Start");
 
-// In src/bm/ui/mainWindow.cpp
-
-        // 2. --- Configuration Loading ---
         m_uiRecentMessageCount = 2000; // Start with a default
         int defaultDeviceNum = 0;      // Start with a default
 
@@ -170,14 +160,8 @@ BusMonitorFrame::BusMonitorFrame() : wxFrame(nullptr, wxID_ANY, "MIL-STD-1553 Bu
             });
         }
     );
-// In BusMonitorFrame::BusMonitorFrame()
 
-// ...
 
-// 3. --- Backend Communication Setup ---
-// Sets up callback functions to receive data from the BM backend.
-// CRITICAL: Uses wxTheApp->CallAfter to safely marshal calls from the BM's
-// worker thread to the main UI thread, preventing race conditions and crashes.
 
 /**
  * @brief Callback to receive formatted message strings from the backend.
@@ -358,11 +342,9 @@ void BusMonitorFrame::onTreeItemClicked(wxTreeEvent &event) {
     int filterMc = -1;
     bool found = false;
     auto& model = MilStd1553::getInstance();
-    // 1. Tıklanan öğenin bir Mode Code olup olmadığını kontrol et
     auto it = m_treeItemToMcMap.find(clickedId);
     if (it != m_treeItemToMcMap.end()) {
-        filterMc = it->second; // MC numarasını al
-        // Parent'larına giderek RT ve Bus bilgilerini bul
+        filterMc = it->second; 
         wxTreeItemId rtId = m_milStd1553Tree->GetItemParent(m_milStd1553Tree->GetItemParent(clickedId));
         wxTreeItemId busId = m_milStd1553Tree->GetItemParent(rtId);
 
@@ -396,11 +378,9 @@ void BusMonitorFrame::onTreeItemClicked(wxTreeEvent &event) {
     }
 
     if (found) {
-        // Backend'i yeni kriterlerle ayarla
         BM::getInstance().setFilterCriteria(filterBusChar, filterRt, filterSa, filterMc);
         BM::getInstance().enableFilter(true);
 
-        // UI'daki filtre etiketini güncelle
         wxString filterLabel = "Filtering by: ";
         if(filterBusChar != 0) filterLabel += wxString::Format("Bus %c", filterBusChar);
         if(filterRt != -1) filterLabel += wxString::Format(", RT %d", filterRt);
