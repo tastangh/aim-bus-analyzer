@@ -1,4 +1,3 @@
-// fileName: bc.cpp
 #include "bc.hpp"
 #include "frameComponent.hpp" 
 #include <cstring>
@@ -22,7 +21,7 @@ AiReturn BusController::initialize(int deviceId, int streamId) {
         std::cout << "[BC] Zaten başlatılmış." << std::endl;
         return API_OK;
     }
-    std::cout << "[BC] Başlatılıyor... Cihaz ID: " << deviceId << std::endl;
+    std::cout << "[BC] Başlatılıyor... Cihaz ID: " << deviceId << ", Stream ID: " << streamId << std::endl;
     m_deviceId = deviceId;
     m_streamId = streamId;
 
@@ -44,17 +43,17 @@ AiReturn BusController::initialize(int deviceId, int streamId) {
     
     TY_API_RESET_INFO reset_info;
     memset(&reset_info, 0, sizeof(reset_info));
-    ret = ApiCmdReset(m_boardHandle, m_biuId, API_RESET_ALL, &reset_info);
+    ret = ApiCmdReset(m_boardHandle, m_streamId, API_RESET_ALL, &reset_info);
     if (ret != API_OK) { std::cerr << "[BC] HATA: ApiCmdReset başarısız." << std::endl; return ret; }
     std::cout << "[BC] ApiCmdReset başarılı." << std::endl;
 
-    ret = ApiCmdCalCplCon(m_boardHandle, m_biuId, API_CAL_BUS_PRIMARY, API_CAL_CPL_TRANSFORM);
+    ret = ApiCmdCalCplCon(m_boardHandle, m_streamId, API_CAL_BUS_PRIMARY, API_CAL_CPL_TRANSFORM);
     if (ret != API_OK) return ret;
-    ret = ApiCmdCalCplCon(m_boardHandle, m_biuId, API_CAL_BUS_SECONDARY, API_CAL_CPL_TRANSFORM);
+    ret = ApiCmdCalCplCon(m_boardHandle, m_streamId, API_CAL_BUS_SECONDARY, API_CAL_CPL_TRANSFORM);
     if (ret != API_OK) return ret;
     std::cout << "[BC] Donanım kuplajı ayarlandı." << std::endl;
 
-    ret = ApiCmdBCIni(m_boardHandle, m_biuId, API_DIS, API_ENA, API_TBM_TRANSFER, API_BC_XFER_BUS_PRIMARY);
+    ret = ApiCmdBCIni(m_boardHandle, m_streamId, API_DIS, API_ENA, API_TBM_TRANSFER, API_BC_XFER_BUS_PRIMARY);
     if (ret != API_OK) return ret;
     std::cout << "[BC] BC modu başlatıldı." << std::endl;
 
@@ -67,7 +66,7 @@ void BusController::shutdown() {
     if (!m_isInitialized) return;
     std::cout << "[BC] Kapatılıyor..." << std::endl;
     if (m_boardHandle != 0) {
-        ApiCmdBCHalt(m_boardHandle, m_biuId);
+        ApiCmdBCHalt(m_boardHandle, m_streamId);
         ApiClose(m_boardHandle);
         m_boardHandle = 0;
     }
@@ -97,7 +96,7 @@ AiReturn BusController::defineFrameResources(FrameComponent* frame) {
     
     TY_API_BC_BH_INFO bh_info;
     memset(&bh_info, 0, sizeof(bh_info));
-    AiReturn ret = ApiCmdBCBHDef(m_boardHandle, m_biuId, hdrId, bufId, 0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC, 0, 0, 0, 0, &bh_info);
+    AiReturn ret = ApiCmdBCBHDef(m_boardHandle, m_streamId, hdrId, bufId, 0, 0, API_QUEUE_SIZE_1, API_BQM_CYCLIC, 0, 0, 0, 0, &bh_info);
     if (ret != API_OK) return ret;
 
     TY_API_BC_XFER xfer;
@@ -117,7 +116,7 @@ AiReturn BusController::defineFrameResources(FrameComponent* frame) {
     }
     
     AiUInt32 desc_addr;
-    ret = ApiCmdBCXferDef(m_boardHandle, m_biuId, &xfer, &desc_addr);
+    ret = ApiCmdBCXferDef(m_boardHandle, m_streamId, &xfer, &desc_addr);
     std::cout << "[BC::define] Kaynak tanımlama sonucu: " << ret << std::endl;
     return ret;
 }
@@ -147,42 +146,35 @@ AiReturn BusController::sendAcyclicFrame(const FrameComponent* frame, std::array
             try { dataWords[i] = static_cast<AiUInt16>(std::stoul(config.data[i], nullptr, 16)); } catch(...) { dataWords[i] = 0; }
         }
         AiUInt16 outIndex; AiUInt32 outAddr;
-        ret = ApiCmdBufDef(m_boardHandle, m_biuId, API_BUF_BC_MSG, headerId, bufferId, wc_to_process, dataWords.data(), &outIndex, &outAddr);
+        ret = ApiCmdBufDef(m_boardHandle, m_streamId, API_BUF_BC_MSG, 0, bufferId, wc_to_process, dataWords.data(), &outIndex, &outAddr);
         if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBufDef başarısız." << std::endl; return ret; }
     }
     
-    TY_API_BC_FRAME temp_minor_frame;
-    memset(&temp_minor_frame, 0, sizeof(temp_minor_frame));
-    temp_minor_frame.id = (AiUInt16)transferId; 
-    temp_minor_frame.cnt = 1;
-    temp_minor_frame.instr[0] = API_BC_INSTR_TRANSFER;
-    temp_minor_frame.xid[0] = transferId;
-    ret = ApiCmdBCFrameDef(m_boardHandle, m_biuId, &temp_minor_frame);
-    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCFrameDef başarısız." << std::endl; return ret; }
+    TY_API_BC_ACYC acyclic_frame;
+    memset(&acyclic_frame, 0, sizeof(acyclic_frame));
+    acyclic_frame.cnt = 1;
+    acyclic_frame.instr[0] = API_BC_INSTR_TRANSFER;
+    acyclic_frame.xid[0] = transferId;
+    ret = ApiCmdBCAcycPrep(m_boardHandle, m_streamId, &acyclic_frame);
+    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCAcycPrep başarısız." << std::endl; return ret; }
+
+    ret = ApiCmdBCAcycSend(m_boardHandle, m_streamId, API_BC_ACYC_SEND_IMMEDIATELY, 0, 0);
+    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCAcycSend başarısız." << std::endl; return ret; }
     
-    TY_API_BC_MFRAME_EX temp_major_frame;
-    memset(&temp_major_frame, 0, sizeof(temp_major_frame));
-    temp_major_frame.cnt = 1;
-    temp_major_frame.fid[0] = temp_minor_frame.id;
-    ret = ApiCmdBCMFrameDefEx(m_boardHandle, m_biuId, &temp_major_frame);
-    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCMFrameDefEx başarısız." << std::endl; return ret; }
-    
-    AiUInt32 major_addr, minor_addr[64];
-    ret = ApiCmdBCStart(m_boardHandle, m_biuId, API_BC_START_IMMEDIATELY, 1, 10.0f, 0, &major_addr, minor_addr);
-    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCStart başarısız." << std::endl; return ret; }
-    
-    std::this_thread::sleep_for(std::chrono::milliseconds(25)); 
+    std::this_thread::sleep_for(std::chrono::milliseconds(50)); 
+
+    TY_API_BC_XFER_DSP xfer_status;
+    memset(&xfer_status, 0, sizeof(xfer_status));
+    ret = ApiCmdBCXferRead(m_boardHandle, m_streamId, transferId, 0, &xfer_status);
+    if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBCXferRead status başarısız." << std::endl; return ret; }
 
     bool expectsData = (config.mode == BcMode::RT_TO_BC || config.mode == BcMode::RT_TO_RT);
     if (expectsData && wc_to_process > 0) {
         AiUInt16 outIndex; AiUInt32 outAddr;
-        ret = ApiCmdBufRead(m_boardHandle, m_biuId, API_BUF_BC_MSG, headerId, bufferId, wc_to_process, receivedData.data(), &outIndex, &outAddr);
-        if (ret != API_OK) return ret;
+        ret = ApiCmdBufRead(m_boardHandle, m_streamId, API_BUF_BC_MSG, 0, bufferId, wc_to_process, receivedData.data(), &outIndex, &outAddr);
+        if (ret != API_OK) { std::cerr << "[BC::send] HATA: ApiCmdBufRead data başarısız." << std::endl; return ret; }
     }
-
-    ret = ApiCmdBCHalt(m_boardHandle, m_biuId);
-    if (ret != API_OK) return ret;
-
-    std::cout << "[BC::send] Gönderim başarıyla tamamlandı." << std::endl;
+    
+    std::cout << "[BC::send] Gönderim ve okuma başarıyla tamamlandı." << std::endl;
     return API_OK;
 }

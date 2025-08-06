@@ -22,12 +22,22 @@ BusControllerFrame::BusControllerFrame()
   auto *topSizer = new wxBoxSizer(wxHORIZONTAL);
   
   m_deviceIdTextInput = new wxTextCtrl(topPanel, wxID_ANY, "0", wxDefaultPosition, wxSize(40, -1));
+
+  wxArrayString streamChoices;
+  streamChoices.Add("Stream 1");
+  streamChoices.Add("Stream 2");
+  streamChoices.Add("Stream 3");
+  streamChoices.Add("Stream 4");
+  m_streamSelectCombo = new wxComboBox(topPanel, wxID_ANY, "Stream 1", wxDefaultPosition, wxDefaultSize, streamChoices, wxCB_READONLY);
+
   m_repeatToggle = new wxToggleButton(topPanel, wxID_ANY, "Repeat Off", wxDefaultPosition, wxSize(100, -1));
   m_sendActiveFramesToggle = new wxToggleButton(topPanel, wxID_ANY, "Send Active Frames", wxDefaultPosition, wxSize(170, -1));
   auto *addButton = new wxButton(topPanel, wxID_ADD, "Add Frame");
 
   topSizer->Add(new wxStaticText(topPanel, wxID_ANY, "AIM Device ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
   topSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+  topSizer->Add(new wxStaticText(topPanel, wxID_ANY, "Stream:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+  topSizer->Add(m_streamSelectCombo, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
   topSizer->AddStretchSpacer();
   topSizer->Add(m_repeatToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
   topSizer->Add(m_sendActiveFramesToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
@@ -67,7 +77,7 @@ void BusControllerFrame::addFrameToList(FrameConfig config) {
     auto& bc = BusController::getInstance();
     if (!bc.isInitialized()) {
         std::cout << "[UI] BC başlatılmamış, initialize çağrılıyor..." << std::endl;
-        AiReturn ret = bc.initialize(getDeviceId());
+        AiReturn ret = bc.initialize(getDeviceId(), getStreamId());
         if (ret != API_OK) {
             wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
             return;
@@ -125,7 +135,6 @@ void BusControllerFrame::onRepeatToggle(wxCommandEvent &) {
     m_repeatToggle->SetLabel(m_repeatToggle->GetValue() ? "Repeat On" : "Repeat Off");
 }
 
-
 void BusControllerFrame::onSendActiveFramesToggle(wxCommandEvent &event) {
   if (m_sendActiveFramesToggle->GetValue()) {
     if (m_isSending) return; 
@@ -147,12 +156,10 @@ void BusControllerFrame::startSendingThread() {
 
 void BusControllerFrame::stopSendingThread() {
   m_isSending = false;
-
   if (m_sendThread.joinable()) {
     m_sendThread.join();
   }
   
-
   wxTheApp->CallAfter([this] {
     if(this) { 
         m_sendActiveFramesToggle->SetValue(false); 
@@ -177,7 +184,7 @@ void BusControllerFrame::sendActiveFramesLoop() {
     
     auto& bc = BusController::getInstance();
     if (!bc.isInitialized()) {
-        AiReturn ret = bc.initialize(getDeviceId());
+        AiReturn ret = bc.initialize(getDeviceId(), getStreamId());
         if (ret != API_OK) {
             wxTheApp->CallAfter([this, ret]{ 
                 wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); 
@@ -228,6 +235,13 @@ int BusControllerFrame::getDeviceId() {
     long val = 0;
     if (m_deviceIdTextInput) m_deviceIdTextInput->GetValue().ToLong(&val);
     return (int)val;
+}
+
+int BusControllerFrame::getStreamId() {
+    if (m_streamSelectCombo) {
+        return m_streamSelectCombo->GetSelection() + 1;
+    }
+    return 1; // Varsayılan
 }
 
 void BusControllerFrame::onExit(wxCommandEvent &) { Close(true); }

@@ -1,4 +1,3 @@
-// fileName: bc.hpp
 #pragma once
 
 #include "common.hpp"
@@ -33,7 +32,7 @@ private:
     AiUInt32 m_boardHandle = 0;
     int m_deviceId = 0;
     int m_streamId = 0;
-    const int m_biuId = 0;
+    const int m_biuId = 1; 
     
     AiUInt32 m_nextTransferId = 1;
     AiUInt32 m_nextHeaderId = 1;

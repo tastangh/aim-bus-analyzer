@@ -1,10 +1,10 @@
-// fileName: mainWindow.hpp
 #pragma once
 
 #include "common.hpp"
 #include <wx/wx.h>
 #include <wx/tglbtn.h>
 #include <wx/scrolwin.h>
+#include <wx/combobox.h>
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -24,6 +24,7 @@ public:
   
   void setStatusText(const wxString &status);
   int getDeviceId();
+  int getStreamId();
   void updateListLayout();
 
 private:
@@ -39,6 +40,7 @@ private:
   void stopSendingThread();
 
   wxTextCtrl *m_deviceIdTextInput;
+  wxComboBox* m_streamSelectCombo;
   wxToggleButton *m_repeatToggle;
   wxToggleButton *m_sendActiveFramesToggle;
   wxScrolledWindow *m_scrolledWindow;
