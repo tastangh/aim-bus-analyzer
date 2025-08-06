@@ -40,6 +40,8 @@ private:
 
   int m_uiRecentMessageCount;
   wxTextCtrl *m_deviceIdTextInput;
+  wxComboBox *m_streamSelectCombo; // BU SATIRI EKLEYİN
+
   wxTreeCtrl *m_milStd1553Tree;
   wxTextCtrl *m_messageList;
   wxButton *m_startStopButton;

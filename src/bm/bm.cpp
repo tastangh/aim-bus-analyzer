@@ -1,3 +1,4 @@
+
 #include "bm.hpp"
 #include <stdio.h>
 #include <cstring>
@@ -7,13 +8,12 @@
 
 /**
  * @def AIM_CHECK_BM_ERROR
- * @brief A utility macro for robust error handling of AIM API calls.
- *        It checks the return value of an API function, prints a detailed
- *        error message to stderr if it's not API_OK, and returns the error code
- *        to propagate the failure up the call stack.
- * @param retVal The return value from the AIM API function.
- * @param funcName A string literal representing the name of the calling function for context.
- * @param bmInstancePtr A pointer to the BM instance, reserved for future use (e.g., error state handling).
+ * @brief AIM API çağrıları için sağlam hata işleme sağlayan bir yardımcı makro.
+ * Bir API fonksiyonunun dönüş değerini kontrol eder, API_OK değilse stderr'e ayrıntılı
+ * bir hata mesajı yazdırır ve hatayı yukarıya yaymak için hata kodunu döndürür.
+ * @param retVal AIM API fonksiyonundan gelen dönüş değeri.
+ * @param funcName Çağıran fonksiyonun adını içeren bir string (kontekst için).
+ * @param bmInstancePtr BM örneğine bir pointer (gelecekteki kullanım için ayrılmış).
  */
 #define AIM_CHECK_BM_ERROR(retVal, funcName, bmInstancePtr) \
     if (retVal != API_OK) { \
@@ -24,8 +24,8 @@
     }
 
 /**
- * @brief Resets the internal state of a MessageTransaction struct.
- *        Called to prepare the struct for assembling the nexta message from the data stream.
+ * @brief MessageTransaction yapısının iç durumunu sıfırlar.
+ * Yapıyı veri akışından bir sonraki mesajı birleştirmeye hazırlar.
  */
 void BM::MessageTransaction::clear() {
     full_timetag = 0; last_timetag_l_data = 0; last_timetag_h_data = 0;
@@ -38,17 +38,17 @@ void BM::MessageTransaction::clear() {
 }
 
 /**
- * @brief Checks if the transaction object is empty.
- * @return True if no valid command, error, or data has been added, false otherwise.
+ * @brief İşlem nesnesinin boş olup olmadığını kontrol eder.
+ * @return Geçerli bir komut, hata veya veri eklenmemişse true, aksi takdirde false.
  */
 bool BM::MessageTransaction::isEmpty() const {
     return !cmd1_valid && !error_valid && full_timetag == 0 && data_words.empty();
 }
 
 /**
- * @brief Converts an AIM API error code into a human-readable string.
- * @param errorCode The AiReturn value from an API call.
- * @return A std::string containing the error message.
+ * @brief Bir AIM API hata kodunu okunabilir bir string'e çevirir.
+ * @param errorCode Bir API çağrısından dönen AiReturn değeri.
+ * @return Hata mesajını içeren bir std::string.
  */
 std::string getAIMApiErrorMessage(AiReturn errorCode) {
     const char* errMsgPtr = ApiGetErrorMessage(errorCode);
@@ -56,9 +56,9 @@ std::string getAIMApiErrorMessage(AiReturn errorCode) {
 }
 
 /**
- * @brief Provides access to the singleton instance of the BM class.
- *        Ensures a single, globally accessible point for Bus Monitor operations.
- * @return Reference to the singleton BM instance.
+ * @brief BM sınıfının singleton örneğine erişim sağlar.
+ * Bus Monitor işlemleri için tek, global olarak erişilebilir bir nokta sağlar.
+ * @return Singleton BM örneğine referans.
  */
 BM& BM::getInstance() {
     static BM instance;
@@ -66,9 +66,9 @@ BM& BM::getInstance() {
 }
 
 /**
- * @brief Constructor for the Bus Monitor (BM) singleton.
- *        Initializes member variables and resizes the data reception buffer.
- *        Private to enforce the singleton pattern.
+ * @brief Bus Monitor (BM) singleton'u için constructor.
+ * Üye değişkenleri başlatır ve veri alım tamponunu yeniden boyutlandırır.
+ * Singleton desenini zorlamak için private'dır.
  */
 BM::BM() : m_ulModHandle(0), m_monitoringActive(false), m_shutdownRequested(false),
            m_dataLoggingEnabled(false), 
@@ -81,9 +81,9 @@ BM::BM() : m_ulModHandle(0), m_monitoringActive(false), m_shutdownRequested(fals
 }
 
 /**
- * @brief Destructor for the Bus Monitor (BM) singleton.
- *        Ensures that monitoring is stopped, the board is shut down, and the
- *        AIM API is properly exited to release all resources.
+ * @brief Bus Monitor (BM) singleton'u için destructor.
+ * Monitoring'in durdurulmasını, kartın kapatılmasını ve tüm kaynakları
+ * serbest bırakmak için AIM API'sinden düzgün bir şekilde çıkılmasını sağlar.
  */
 BM::~BM() {
     if (isMonitoring()) { stop(); }
@@ -92,11 +92,11 @@ BM::~BM() {
 }
 
 /**
- * @brief Initializes the AIM hardware board and resets it to a known state.
- *        This function performs the initial handshake with the API library and the hardware,
- *        making it ready for configuration.
- * @param config UI-provided configuration containing device and stream identifiers.
- * @return API_OK on success, or an AIM error code on failure.
+ * @brief AIM donanım kartını başlatır ve bilinen bir duruma sıfırlar.
+ * Bu fonksiyon, API kütüphanesi ve donanım ile ilk el sıkışmayı gerçekleştirir,
+ * onu yapılandırmaya hazır hale getirir.
+ * @param config Cihaz ve stream tanımlayıcılarını içeren UI tarafından sağlanan yapılandırma.
+ * @return Başarılı olursa API_OK, başarısız olursa bir AIM hata kodu.
  */
 AiReturn BM::initializeBoard(const ConfigBmUi& config) {
     AiReturn ret = API_OK; static bool apiLibraryInitialized = false;
@@ -110,15 +110,15 @@ AiReturn BM::initializeBoard(const ConfigBmUi& config) {
 }
 
 /**
- * @brief Closes the handle to the AIM board, releasing it for other applications.
+ * @brief AIM kartına olan handle'ı kapatır, diğer uygulamalar için serbest bırakır.
  */
 void BM::shutdownBoard() { if (m_ulModHandle != 0) { ApiClose(m_ulModHandle); m_ulModHandle = 0; } }
 
 /**
- * @brief Configures the board specifically for Bus Monitor (BM) operations.
- *        Sets coupling, initializes the BM core, and sets the capture mode to continuous recording.
- * @param config UI-provided configuration specifying the coupling mode.
- * @return API_OK on success, or an AIM error code on failure.
+ * @brief Kartı özellikle Bus Monitor (BM) işlemleri için yapılandırır.
+ * Coupling modunu ayarlar, BM çekirdeğini başlatır ve yakalama modunu sürekli kayda ayarlar.
+ * @param config Coupling modunu belirten UI tarafından sağlanan yapılandırma.
+ * @return Başarılı olursa API_OK, başarısız olursa bir AIM hata kodu.
  */
 AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
     AiReturn ret = API_OK;
@@ -131,9 +131,9 @@ AiReturn BM::configureBusMonitor(const ConfigBmUi& config) {
 }
 
 /**
- * @brief Opens and starts the hardware data queue for BM recording.
- *        This is the channel through which monitored data flows from the hardware to the host.
- * @return API_OK on success, or an AIM error code on failure.
+ * @brief BM kaydı için donanım veri kuyruğunu açar ve başlatır.
+ * Bu, izlenen verinin donanımdan host'a aktığı kanaldır.
+ * @return Başarılı olursa API_OK, başarısız olursa bir AIM hata kodu.
  */
 AiReturn BM::openDataQueue() {
     AiReturn ret = API_OK;
@@ -146,15 +146,15 @@ AiReturn BM::openDataQueue() {
 }
 
 /**
- * @brief Stops and closes the hardware data queue.
+ * @brief Donanım veri kuyruğunu durdurur ve kapatır.
  */
 void BM::closeDataQueue() { if (m_ulModHandle != 0 && m_dataQueueId != 0) { ApiCmdDataQueueControl(m_ulModHandle, m_dataQueueId, API_DATA_QUEUE_CTRL_MODE_STOP); ApiCmdDataQueueClose(m_ulModHandle, m_dataQueueId); m_dataQueueId = 0; } }
 
 /**
- * @brief Public entry point to start the entire monitoring process.
- *        Orchestrates board initialization, configuration, and starts the dedicated monitoring thread.
- * @param config The complete configuration from the user interface.
- * @return API_OK if monitoring started successfully, otherwise an error code.
+ * @brief Tüm monitoring sürecini başlatmak için genel giriş noktası.
+ * Kart başlatmayı, yapılandırmayı düzenler ve adanmış monitoring thread'ini başlatır.
+ * @param config Kullanıcı arayüzünden gelen tam yapılandırma.
+ * @return Monitoring başarıyla başlatılırsa API_OK, aksi takdirde bir hata kodu.
  */
 AiReturn BM::start(const ConfigBmUi& config) {
     if (m_monitoringActive.load()) return API_OK;
@@ -169,8 +169,8 @@ AiReturn BM::start(const ConfigBmUi& config) {
 }
 
 /**
- * @brief Public entry point to stop the monitoring process.
- *        Signals the monitoring thread to terminate, joins it, and de-initializes hardware resources.
+ * @brief Monitoring sürecini durdurmak için genel giriş noktası.
+ * Monitoring thread'ine sonlanma sinyali gönderir, ona katılır ve donanım kaynaklarını de-initialize eder.
  */
 void BM::stop() {
     m_shutdownRequested.store(true); if (m_monitorThread.joinable()) { m_monitorThread.join(); }
@@ -179,27 +179,27 @@ void BM::stop() {
 }
 
 /**
- * @brief Returns the current monitoring state.
- * @return True if the monitoring thread is active, false otherwise.
+ * @brief Mevcut monitoring durumunu döndürür.
+ * @return Monitoring thread'i aktifse true, aksi takdirde false.
  */
 bool BM::isMonitoring() const { return m_monitoringActive.load(); }
 
 /**
- * @brief Registers a callback function for updating the UI message display.
- * @param cb A std::function to be called with formatted message strings.
+ * @brief UI mesaj ekranını güncellemek için bir callback fonksiyonu kaydeder.
+ * @param cb Biçimlendirilmiş mesaj string'leri ile çağrılacak bir std::function.
  */
 void BM::setUpdateMessagesCallback(UpdateMessagesCallback cb) { m_guiUpdateMessagesCb = cb; }
 
 /**
- * @brief Registers a callback function for updating the UI tree view.
- * @param cb A std::function to be called with active bus/RT/SA information.
+ * @brief UI ağaç görünümünü güncellemek için bir callback fonksiyonu kaydeder.
+ * @param cb Aktif bus/RT/SA bilgileri ile çağrılacak bir std::function.
  */
 void BM::setUpdateTreeItemCallback(UpdateTreeItemCallback cb) { m_guiUpdateTreeItemCb = cb; }
 
 /**
- * @brief The main function for the dedicated monitoring thread.
- *        Continuously polls the data queue for new monitor data and triggers processing.
- *        This loop is the heart of the real-time data acquisition.
+ * @brief Adanmış monitoring thread'i için ana fonksiyon.
+ * Yeni monitör verisi için sürekli olarak veri kuyruğunu yoklar ve işlemeyi tetikler.
+ * Bu döngü, gerçek zamanlı veri toplamanın kalbidir.
  */
 void BM::monitorThreadFunc() {
     TY_API_DATA_QUEUE_READ queueReadParams; TY_API_DATA_QUEUE_STATUS queueStatus; AiReturn ret;
@@ -218,16 +218,16 @@ void BM::monitorThreadFunc() {
 }
 
 /**
- * @brief Formats a completed message transaction into a human-readable string for the UI.
- *        This function is responsible for creating the final output format, including Time,
- *        Bus, Type, and Data Word sections. It also applies filtering and triggers UI tree updates.
- * @param trans The fully assembled message transaction to be processed.
- * @param outString The output string to which the formatted message will be appended.
+ * @brief Tamamlanmış bir mesaj işlemini UI için okunabilir bir string'e biçimlendirir.
+ * Bu fonksiyon, Zaman, Bus, Tip ve Veri Kelimesi bölümleri dahil olmak üzere
+ * son çıktı formatını oluşturmaktan sorumludur. Ayrıca filtreleme uygular ve UI ağaç güncellemelerini tetikler.
+ * @param trans İşlenecek tam olarak birleştirilmiş mesaj işlemi.
+ * @param outString Biçimlendirilmiş mesajın ekleneceği çıktı string'i.
  */
 void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string& outString) {
     if (!trans.cmd1_valid) return;
 
-    // Apply filtering criteria before any expensive formatting.
+    // Herhangi bir pahalı biçimlendirmeden önce filtreleme kriterlerini uygula.
     { 
         std::lock_guard<std::mutex> lock(m_filterMutex);
         if (m_filterEnabled.load()) {
@@ -254,7 +254,7 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
         }
     } 
 
-    // Signal the UI to update its tree view for the active terminal.
+    // Aktif terminal için UI'ya ağaç görünümünü güncellemesi için sinyal gönder.
     if (m_guiUpdateTreeItemCb) {
         AiUInt8 rtAddr1 = (trans.cmd1 >> 11) & 0x1F;
         AiUInt8 sa_mc1  = (trans.cmd1 >> 5) & 0x1F;
@@ -263,11 +263,11 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
         }
     }
 
-    // Use a stringstream for efficient string building.
+    // Verimli string oluşturma için bir stringstream kullan.
     std::stringstream ss;
     char tempBuf[256];
 
-    // Format timestamp.
+    // Zaman damgasını biçimlendir.
     if (trans.full_timetag != 0) {
         uint64_t total_us = trans.full_timetag * 1;
         snprintf(tempBuf, sizeof(tempBuf), "Time: %010" PRIu64 "us\n", total_us);
@@ -276,7 +276,7 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
         ss << "Time: <no timestamp>\n";
     }
 
-    // Decode command word to create a summary line.
+    // Bir özet satırı oluşturmak için komut kelimesini çöz.
     AiUInt8 rt = (trans.cmd1 >> 11) & 0x1F;
     AiUInt8 tr = (trans.cmd1 >> 10) & 0x01;
     AiUInt8 sa = (trans.cmd1 >> 5) & 0x1F;
@@ -294,8 +294,8 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
     if (!trans.stat1_valid) ss << " (No Response)";
     ss << "\n";
 
-    // Determine the expected number of data words and format them,
-    // using placeholders if the actual data is missing.
+    // Beklenen veri kelimesi sayısını belirle ve onları biçimlendir,
+    // gerçek veri eksikse yer tutucular kullan.
     int words_to_display = 0;
     bool is_mode_code = (sa == 0 || sa == 31);
     bool mc_has_data = (is_mode_code && ((tr == 1 && wc_field == 17) || (tr == 0 && wc_field == 16)));
@@ -315,7 +315,7 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
                 ss << "0000 ";
             }
             
-            // Wrap data words every 8 words for readability.
+            // Okunabilirlik için her 8 veri kelimesinde bir alt satıra geç.
             if ((i + 1) % 8 == 0 && (i + 1) < words_to_display) {
                 ss << "\n      ";
             }
@@ -328,11 +328,11 @@ void BM::formatAndRelayTransaction(const MessageTransaction& trans, std::string&
 }
 
 /**
- * @brief Processes a raw chunk of data from the hardware queue.
- *        This function implements a state machine that iterates through the raw monitor words,
- *        assembles them into logical MessageTransaction objects, and dispatches them for formatting.
- * @param buffer Pointer to the raw data buffer.
- * @param bytesRead The number of bytes read into the buffer.
+ * @brief Donanım kuyruğundan gelen ham bir veri yığınını işler.
+ * Bu fonksiyon, ham monitör kelimeleri arasında dolaşan, onları mantıksal
+ * MessageTransaction nesnelerine birleştiren ve biçimlendirme için gönderen bir durum makinesi uygular.
+ * @param buffer Ham veri tamponuna pointer.
+ * @param bytesRead Tampona okunan bayt sayısı.
  */
 void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
     MessageTransaction currentTransaction;
@@ -347,8 +347,8 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
         AiUInt32 entryData = monitorWord & 0x07FFFFFF;
         AiUInt16 busWord = entryData & 0xFFFF;
         
-        // A new transaction is typically demarcated by a timetag, error, or command word.
-        // When one is encountered, the previously assembled transaction is finalized and processed.
+        // Yeni bir işlem genellikle bir zaman damgası, hata veya komut kelimesi ile belirlenir.
+        // Biriyle karşılaşıldığında, daha önce birleştirilen işlem sonlandırılır ve işlenir.
         bool isNewMessageStart = (type == 0x1 || type == 0x2 || type == 0x3 || type == 0x8 || type == 0xC);
 
         if (isNewMessageStart && !currentTransaction.isEmpty()) {
@@ -389,17 +389,17 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
                 }
                 break;
             }
-            default: break; // Ignore unused or reserved types.
+            default: break; // Kullanılmayan veya ayrılmış tipleri yoksay.
         }
     }
 
-    // Process any remaining transaction at the end of the buffer.
+    // Tamponun sonundaki kalan işlemi işle.
     if (!currentTransaction.isEmpty()) {
         if (currentTransaction.full_timetag == 0) currentTransaction.full_timetag = last_full_timetag;
         formatAndRelayTransaction(currentTransaction, allMessagesForUi);
     }
     
-    // Relay the complete chunk of formatted messages to the UI.
+    // Biçimlendirilmiş mesajların tam yığınını UI'ya ilet.
     if (m_guiUpdateMessagesCb && !allMessagesForUi.empty()) {
         m_guiUpdateMessagesCb(allMessagesForUi);
     }
@@ -410,29 +410,29 @@ void BM::processAndRelayData(const unsigned char* buffer, AiUInt32 bytesRead) {
 }
 
 /**
- * @brief Sets the state for enabling or disabling data logging to a file.
+ * @brief Veri loglamasını bir dosyaya etkinleştirme veya devre dışı bırakma durumunu ayarlar.
  */
 void BM::enableDataLogging(bool enable) {
     m_dataLoggingEnabled.store(enable);
 }
 /**
- * @brief Enables or disables message filtering.
- * @param enable True to enable filtering, false to disable.
+ * @brief Mesaj filtrelemeyi etkinleştirir veya devre dışı bırakır.
+ * @param enable Filtrelemeyi etkinleştirmek için true, devre dışı bırakmak için false.
  */
 void BM::enableFilter(bool enable) { std::lock_guard<std::mutex> lock(m_filterMutex); m_filterEnabled.store(enable); }
 
 /**
- * @brief Checks if message filtering is currently enabled.
- * @return True if filtering is enabled.
+ * @brief Mesaj filtrelemenin şu anda etkin olup olmadığını kontrol eder.
+ * @return Filtreleme etkinse true.
  */
 bool BM::isFilterEnabled() const { return m_filterEnabled.load(); }
 
 /**
- * @brief Sets the criteria for message filtering.
- *        -1 for rt/sa or 0 for bus means 'any'.
- * @param bus The bus to filter ('A' or 'B').
- * @param rt The remote terminal address to filter (0-30).
- * @param sa The subaddress to filter (0-30).
+ * @brief Mesaj filtreleme için kriterleri ayarlar.
+ * rt/sa için -1 veya bus için 0 'herhangi biri' anlamına gelir.
+ * @param bus Filtrelenecek bus ('A' veya 'B').
+ * @param rt Filtrelenecek remote terminal adresi (0-30).
+ * @param sa Filtrelenecek subaddress (0-30).
  */
  void BM::setFilterCriteria(char bus, int rt, int sa, int mc) {
     std::lock_guard<std::mutex> lock(m_filterMutex);
