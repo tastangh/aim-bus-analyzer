@@ -31,6 +31,11 @@ public:
     void stop();
     bool isMonitoring() const;
 
+    // --- YENİ EKLENEN PUBLIC FONKSİYONLAR ---
+    AiReturn resetStream(AiUInt32 deviceNum, AiUInt32 streamNum);
+    AiReturn checkDeviceInUse(AiUInt32 deviceNum, AiUInt32& openConnections);
+    // -----------------------------------------
+
     void setUpdateMessagesCallback(UpdateMessagesCallback cb);
     void setUpdateTreeItemCallback(UpdateTreeItemCallback cb);
 
