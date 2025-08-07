@@ -6,6 +6,7 @@
 #include "common.hpp"
 #include "logger.hpp"
 #include <map>
+#include "Api1553.h" // YENİ: AiUInt32 gibi AIM tiplerinin tanınması için eklendi
 
 enum {
   ID_ADD_BTN = 1,
@@ -16,9 +17,10 @@ enum {
   ID_CLEAR_MENU,
   ID_DEVICE_ID_TXT,
   ID_RT_SA_TREE,
-  ID_LOG_TO_FILE_CHECKBOX
+  ID_LOG_TO_FILE_CHECKBOX,
+  ID_STREAM_CHOICE_COMBOBOX,
+  ID_RESET_STREAM_BTN
 };
-
 
 class BusMonitorFrame : public wxFrame {
 public:
@@ -33,6 +35,7 @@ private:
   void onExit(wxCommandEvent &event);
   void onLogToFileToggled(wxCommandEvent &event); 
   void onCloseFrame(wxCloseEvent& event);
+  void onResetStreamClicked(wxCommandEvent &event);
 
   void appendMessagesToUi(const wxString& messages);
   void updateTreeItemVisualState(char bus, int rt, int sa, bool isActive);
@@ -47,6 +50,10 @@ private:
   wxCheckBox *m_logToFileCheckBox;
   std::map<wxTreeItemId, int> m_treeItemToMcMap; 
 
+  // DÜZELTİLDİ: AiUInt32 artık tanınıyor
+  AiUInt32 m_totalStreams;
+  wxComboBox *m_streamChoiceComboBox;
+  wxButton *m_resetStreamButton;
 
   wxDECLARE_EVENT_TABLE();
 };

@@ -441,3 +441,53 @@ bool BM::isFilterEnabled() const { return m_filterEnabled.load(); }
     m_filterSa.store(sa);
     m_filterMc.store(mc); 
 }
+
+
+AiReturn BM::resetStream(AiUInt32 deviceNum, AiUInt32 streamNum) {
+    if (m_monitoringActive.load()) {
+        Logger::warn("BM::resetStream - Monitoring aktifken stream resetlenemez.");
+        // DÜZELTİLDİ: Var olmayan hata kodu API_ERR_NAK ile değiştirildi.
+        return API_ERR_NAK; 
+    }
+
+    TY_API_OPEN openInfo;
+    AiUInt32 tempHandle;
+    AiReturn retVal;
+
+    openInfo.ul_Module = deviceNum;
+    openInfo.ul_Stream = streamNum;
+    strcpy(openInfo.ac_SrvName, "local");
+
+    retVal = ApiOpenEx(&openInfo, &tempHandle);
+    if (retVal != API_OK) {
+        Logger::error("BM::resetStream - Gecici handle acilamadi.");
+        return retVal;
+    }
+
+    Logger::info("Stream " + std::to_string(streamNum) + " resetleniyor...");
+    TY_API_RESET_INFO resetInfo;
+    retVal = ApiCmdReset(tempHandle, (AiUInt8)streamNum, API_RESET_ALL, &resetInfo);
+
+    ApiClose(tempHandle); 
+    
+    if (retVal == API_OK) {
+        Logger::info("Stream " + std::to_string(streamNum) + " basariyla resetlendi.");
+    } else {
+        Logger::error("Stream " + std::to_string(streamNum) + " resetlenemedi.");
+    }
+    
+    return retVal;
+}
+
+
+/**
+ * @brief Belirtilen cihaza kaç adet açık bağlantı (handle) olduğunu kontrol eder.
+ */
+AiReturn BM::checkDeviceInUse(AiUInt32 deviceNum, AiUInt32& openConnections) {
+    TY_API_DRIVER_INFO driverInfo;
+    AiReturn retVal = ApiGetDriverInfo(deviceNum, &driverInfo);
+    if (retVal == API_OK) {
+        openConnections = driverInfo.ul_OpenConnections;
+    }
+    return retVal;
+}
