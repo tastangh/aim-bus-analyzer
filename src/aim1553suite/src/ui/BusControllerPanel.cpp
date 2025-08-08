@@ -3,35 +3,32 @@
 #include "CreateFrameWindow.hpp"
 #include "FrameComponent.hpp"
 #include "bc.hpp"
-
 #include <wx/sizer.h>
 #include <wx/stattext.h>
 #include <wx/button.h>
-#include <wx/app.h>       // HATA ÇÖZÜMÜ: wxTheApp için eklendi.
-#include <wx/msgdlg.h>    // HATA ÇÖZÜMÜ: wxMessageBox için eklendi.
+#include <wx/app.h>
+#include <wx/msgdlg.h>
 #include <iostream>
 #include <algorithm>
+#include <future>
+
 
 BusControllerPanel::BusControllerPanel(wxWindow* parent)
-    : wxPanel(parent, wxID_ANY) {
+    : wxPanel(parent, wxID_ANY), m_deviceId(0), m_streamId(0) {
 
     m_mainFrame = dynamic_cast<MainFrame*>(wxGetTopLevelParent(this));
   
-    auto* topPanel = new wxPanel(this, wxID_ANY);
     auto* topSizer = new wxBoxSizer(wxHORIZONTAL);
   
-    m_deviceIdTextInput = new wxTextCtrl(topPanel, wxID_ANY, "0", wxDefaultPosition, wxSize(40, -1));
-    m_repeatToggle = new wxToggleButton(topPanel, wxID_ANY, "Repeat Off", wxDefaultPosition, wxSize(100, -1));
-    m_sendActiveFramesToggle = new wxToggleButton(topPanel, wxID_ANY, "Send Active Frames", wxDefaultPosition, wxSize(170, -1));
-    auto* addButton = new wxButton(topPanel, wxID_ANY, "Add Frame");
+    // Device ID giriş kutusu kaldırıldı.
+    m_repeatToggle = new wxToggleButton(this, wxID_ANY, "Repeat Off", wxDefaultPosition, wxSize(100, -1));
+    m_sendActiveFramesToggle = new wxToggleButton(this, wxID_ANY, "Send Active Frames", wxDefaultPosition, wxSize(170, -1));
+    auto* addButton = new wxButton(this, wxID_ANY, "Add Frame");
 
-    topSizer->Add(new wxStaticText(topPanel, wxID_ANY, "AIM Device ID:"), 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
-    topSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
     topSizer->AddStretchSpacer();
     topSizer->Add(m_repeatToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topSizer->Add(m_sendActiveFramesToggle, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topSizer->Add(addButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topPanel->SetSizer(topSizer);
 
     m_scrolledWindow = new wxScrolledWindow(this, wxID_ANY);
     m_scrolledSizer = new wxBoxSizer(wxVERTICAL);
@@ -40,7 +37,7 @@ BusControllerPanel::BusControllerPanel(wxWindow* parent)
     m_scrolledWindow->FitInside();
 
     auto* mainSizer = new wxBoxSizer(wxVERTICAL);
-    mainSizer->Add(topPanel, 0, wxEXPAND | wxALL, 5);
+    mainSizer->Add(topSizer, 0, wxEXPAND | wxRIGHT | wxLEFT | wxTOP, 5);
     mainSizer->Add(m_scrolledWindow, 1, wxEXPAND | wxALL, 5);
     
     this->SetSizer(mainSizer);
@@ -48,12 +45,16 @@ BusControllerPanel::BusControllerPanel(wxWindow* parent)
     addButton->Bind(wxEVT_BUTTON, &BusControllerPanel::onAddFrameClicked, this);
     m_repeatToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerPanel::onRepeatToggle, this);
     m_sendActiveFramesToggle->Bind(wxEVT_TOGGLEBUTTON, &BusControllerPanel::onSendActiveFramesToggle, this);
-
-    setStatusText("Bus Controller ready. Please add frames.");
 }
 
 BusControllerPanel::~BusControllerPanel() {
     stopSendingThread();
+}
+
+void BusControllerPanel::InitializeHardware(unsigned int deviceId, unsigned int streamId) {
+    m_deviceId = deviceId;
+    m_streamId = streamId;
+    setStatusText(wxString::Format("BC Panel Initialized for Device %u, Stream %u. Ready.", m_deviceId, m_streamId));
 }
 
 void BusControllerPanel::setStatusText(const wxString &status) {
@@ -65,9 +66,9 @@ void BusControllerPanel::setStatusText(const wxString &status) {
 void BusControllerPanel::addFrameToList(FrameConfig config) {
     auto& bc = BusController::getInstance();
     if (!bc.isInitialized()) {
-        AiReturn ret = bc.initialize(getDeviceId());
+        AiReturn ret = bc.initialize(m_deviceId, m_streamId);
         if (ret != API_OK) {
-            wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
+            wxMessageBox("BC: Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
             return;
         }
     }
@@ -75,7 +76,7 @@ void BusControllerPanel::addFrameToList(FrameConfig config) {
     auto *component = new FrameComponent(m_scrolledWindow, config);
     AiReturn ret = bc.defineFrameResources(component);
     if (ret != API_OK) {
-        wxMessageBox("Failed to define frame resources on AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
+        wxMessageBox("BC: Failed to define frame resources: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR);
         component->Destroy(); 
         return;
     }
@@ -118,7 +119,7 @@ void BusControllerPanel::onClearFramesClicked(wxCommandEvent &) {
 void BusControllerPanel::onRepeatToggle(wxCommandEvent &) {
     bool is_on = m_repeatToggle->GetValue();
     m_repeatToggle->SetLabel(is_on ? "Repeat On" : "Repeat Off");
-    m_isRepeatOn = is_on; // HATA ÇÖZÜMÜ: Atomic bool'u thread-safe olarak güncelle.
+    m_isRepeatOn = is_on;
 }
 
 void BusControllerPanel::onSendActiveFramesToggle(wxCommandEvent &event) {
@@ -136,7 +137,7 @@ void BusControllerPanel::onSendActiveFramesToggle(wxCommandEvent &event) {
 void BusControllerPanel::startSendingThread() {
     if (m_isSending) return;
     m_isSending = true;
-    m_isRepeatOn = m_repeatToggle->GetValue(); // Başlamadan önce durumu güvenli bir şekilde al.
+    m_isRepeatOn = m_repeatToggle->GetValue();
     m_sendThread = std::thread(&BusControllerPanel::sendActiveFramesLoop, this);
 }
 
@@ -161,7 +162,6 @@ void BusControllerPanel::sendActiveFramesLoop() {
     std::future<std::vector<FrameComponent*>> future = promise_ptr->get_future();
     wxTheApp->CallAfter([this, promise_ptr]() {
         if (!this) {
-            // Promise'i yine de set etmeliyiz ki future.get() sonsuza kadar beklemesin.
             std::vector<FrameComponent*> empty;
             promise_ptr->set_value(empty);
             return;
@@ -176,11 +176,11 @@ void BusControllerPanel::sendActiveFramesLoop() {
     
     auto& bc = BusController::getInstance();
     if (!bc.isInitialized()) {
-        AiReturn ret = bc.initialize(getDeviceId());
+        AiReturn ret = bc.initialize(m_deviceId, m_streamId);
         if (ret != API_OK) {
             wxTheApp->CallAfter([this, ret]{ 
                 if(this) {
-                    wxMessageBox("Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); 
+                    wxMessageBox("BC: Failed to initialize AIM device: " + wxString(BusController::getAIMError(ret)), "Error", wxOK | wxICON_ERROR); 
                     stopSendingThread();
                 }
             });
@@ -193,7 +193,6 @@ void BusControllerPanel::sendActiveFramesLoop() {
         return;
     }
     
-    // HATA ÇÖZÜMÜ: Hatalı .Wait() çağrısı kaldırıldı ve döngü koşulu atomic bool ile güncellendi.
     do {
         for (FrameComponent* frame : activeFrames) {
             if (!m_isSending) break;
@@ -218,11 +217,4 @@ void BusControllerPanel::updateListLayout() {
     m_scrolledSizer->Layout();
     m_scrolledWindow->FitInside();
     this->Layout();
-}
-int BusControllerPanel::getDeviceId() { 
-    long val = 0;
-    if (m_deviceIdTextInput) {
-        m_deviceIdTextInput->GetValue().ToLong(&val);
-    }
-    return static_cast<int>(val);
 }

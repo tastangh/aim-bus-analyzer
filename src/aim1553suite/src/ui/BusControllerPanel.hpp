@@ -4,13 +4,9 @@
 #include <wx/panel.h>
 #include <wx/tglbtn.h>
 #include <wx/scrolwin.h>
-#include <wx/textctrl.h> // HATA ÇÖZÜMÜ: Eksik başlık dosyası eklendi.
-
 #include <thread>
 #include <atomic>
 #include <vector>
-#include <future>
-#include <memory>
 
 class FrameComponent;
 class wxBoxSizer;
@@ -21,15 +17,18 @@ public:
     BusControllerPanel(wxWindow* parent);
     ~BusControllerPanel();
 
+    // MainFrame tarafından çağrılacak yeni fonksiyon
+    void InitializeHardware(unsigned int deviceId, unsigned int streamId);
+
+    // Dışarıdan erişim için gerekli fonksiyonlar
     void addFrameToList(FrameConfig config);
     void removeFrame(FrameComponent* frame);
     void updateFrame(FrameComponent* oldFrame, const FrameConfig& newConfig);
     void updateListLayout();
     void setStatusText(const wxString &status);
+    unsigned int getDeviceId() const { return m_deviceId; }
 
-    // HATA ÇÖZÜMÜ: Bu fonksiyon private alanından public alanına taşındı.
-    int getDeviceId(); 
-
+    
 private:
     void onAddFrameClicked(wxCommandEvent &event);
     void onClearFramesClicked(wxCommandEvent &event);
@@ -42,15 +41,19 @@ private:
     
     MainFrame* m_mainFrame;
 
-    wxTextCtrl *m_deviceIdTextInput;
+    // Donanım bilgileri artık burada saklanacak
+    unsigned int m_deviceId;
+    unsigned int m_streamId;
+
+    // Arayüz elemanları
     wxToggleButton *m_repeatToggle;
     wxToggleButton *m_sendActiveFramesToggle;
     wxScrolledWindow *m_scrolledWindow;
     wxBoxSizer *m_scrolledSizer;
 
+    // Arka plan işlemleri
     std::thread m_sendThread;
     std::atomic<bool> m_isSending{false};
-    // HATA ÇÖZÜMÜ: Thread-safe olmayan GUI erişimini düzeltmek için eklendi.
     std::atomic<bool> m_isRepeatOn{false}; 
     std::vector<FrameComponent*> m_frameComponents;
 };

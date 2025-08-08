@@ -1,7 +1,9 @@
 #include "app.hpp"
-#include "ui/MainFrame.hpp" // MainFrame'i bilmesi için
+#include "ui/MainFrame.hpp"
+#include <wx/msgdlg.h>
 
-// Bu makro 'main' fonksiyonunu oluşturur!
+// Api1553.h ve ApiInit/ApiExit çağrıları buradan kaldırıldı.
+
 wxIMPLEMENT_APP(App);
 
 bool App::OnInit() {
@@ -9,9 +11,17 @@ bool App::OnInit() {
         return false;
     }
     
+    // ApiInit() kontrolü artık burada değil.
+    
     auto *frame = new MainFrame();
     frame->Show(true);
     SetTopWindow(frame);
     
     return true;
+}
+
+int App::OnExit() {
+    // ApiExit() çağrısı da buradan kaldırıldı.
+    // Her panel kendi işi bittiğinde temizliğini yapacak.
+    return wxApp::OnExit();
 }

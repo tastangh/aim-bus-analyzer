@@ -10,59 +10,31 @@
 #include <string>
 #include <wx/sizer.h>
 #include <wx/settings.h>
-#include <wx/valnum.h> // wxIntegerValidator için
+#include <wx/valnum.h>
+#include <wx/app.h>
+#include <wx/msgdlg.h>
 
-BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
-    // Ana çerçeveye (MainFrame) olan işaretçiyi alıyoruz.
+BusMonitorPanel::BusMonitorPanel(wxWindow* parent) 
+    : wxPanel(parent, wxID_ANY), m_deviceId(0), m_streamId(0) {
+
     m_mainFrame = dynamic_cast<MainFrame*>(wxGetTopLevelParent(this));
     
+    // Sizer'lar
     auto *topHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *bottomHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
     auto *mainVerticalSizer = new wxBoxSizer(wxVERTICAL);
 
-    // Arayüz Elemanlarını Oluşturma
-    auto *deviceIdText = new wxStaticText(this, wxID_ANY, "AIM Device ID:");
-    m_deviceIdTextInput = new wxTextCtrl(this, wxID_ANY, "0", wxDefaultPosition, wxSize(40, -1));
-    m_deviceIdTextInput->SetValidator(wxIntegerValidator<unsigned int>());
-
-    auto* streamChoiceText = new wxStaticText(this, wxID_ANY, "Stream:");
-    wxArrayString streamChoices;
-    m_totalStreams = 0;
-    AiUInt32 outputCount = 0;
-
-    // Stream sayısını al
-    TY_API_OPEN tempOpen;
-    AiUInt32 tempHandle;
-    long deviceNumLong = 0;
-    m_deviceIdTextInput->GetValue().ToLong(&deviceNumLong);
-    tempOpen.ul_Module = static_cast<AiUInt32>(deviceNumLong);
-    tempOpen.ul_Stream = 1;
-    strcpy(tempOpen.ac_SrvName, "local");
-    if (ApiOpenEx(&tempOpen, &tempHandle) == API_OK) {
-        if (ApiCmdSysGetBoardInfo(tempHandle, TY_BOARD_INFO_CHANNEL_COUNT, 1, &m_totalStreams, &outputCount) == API_OK && outputCount > 0) {
-            for (AiUInt32 i = 1; i <= m_totalStreams; ++i) {
-                streamChoices.Add(wxString::Format("Stream %u", i));
-            }
-        }
-        ApiClose(tempHandle);
-    }
-    
-    if (streamChoices.IsEmpty()) {
-        streamChoices.Add("Stream 1");
-        m_totalStreams = 1;
-    }
-    m_streamChoiceComboBox = new wxComboBox(this, wxID_ANY, streamChoices[0], wxDefaultPosition, wxDefaultSize, streamChoices, wxCB_READONLY);
-    
+    // Arayüz elemanları (Device ID ve Stream seçimi kaldırıldı)
     m_startStopButton = new wxButton(this, wxID_ANY, "Start", wxDefaultPosition, wxSize(100, -1));
     m_startStopButton->SetBackgroundColour(wxColour("#ffcc00"));
-    m_resetStreamButton = new wxButton(this, wxID_ANY, "Reset Stream");
+    m_resetStreamButton = new wxButton(this, wxID_ANY, "Reset Current Stream");
     m_filterButton = new wxButton(this, wxID_ANY, "No filter set. Click a tree item to filter.", wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
     m_filterButton->Enable(false);
     auto *clearButton = new wxButton(this, wxID_ANY, "Clear");
     m_logToFileCheckBox = new wxCheckBox(this, wxID_ANY, "Log to File"); 
 
     m_milStd1553Tree = new wxTreeCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(250, -1), wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT);
-    auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses"); 
+    auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses");
     for (size_t i = 0; i < MilStd1553::getInstance().busList.size(); ++i) {
         auto& bus = MilStd1553::getInstance().busList.at(i);
         bus.setTreeObject(m_milStd1553Tree->AppendItem(rtSaTreeRoot, bus.getName()));
@@ -87,11 +59,7 @@ BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
     wxFont font(10, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     m_messageList->SetFont(font);
 
-    // Layout
-    topHorizontalSizer->Add(deviceIdText, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(m_deviceIdTextInput, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
-    topHorizontalSizer->Add(streamChoiceText, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 10);
-    topHorizontalSizer->Add(m_streamChoiceComboBox, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 5);
+    // Layout (Sadeleştirilmiş hali)
     topHorizontalSizer->Add(m_startStopButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topHorizontalSizer->Add(m_resetStreamButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5);
@@ -105,7 +73,7 @@ BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
     mainVerticalSizer->Add(bottomHorizontalSizer, 1, wxEXPAND | wxALL, 5);
     this->SetSizer(mainVerticalSizer);
 
-    // Olayları Bind() ile bağlıyoruz
+    // Olayları Bağlama
     m_startStopButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onStartStopClicked, this);
     m_filterButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onClearFilterClicked, this);
     clearButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onClearClicked, this);
@@ -113,9 +81,8 @@ BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
     m_milStd1553Tree->Bind(wxEVT_TREE_ITEM_ACTIVATED, &BusMonitorPanel::onTreeItemClicked, this);
     m_logToFileCheckBox->Bind(wxEVT_CHECKBOX, &BusMonitorPanel::onLogToFileToggled, this);
     
-    // Config dosyasından ayarları yükleme
+    // Config dosyasından sadece UI ile ilgili ayarları okuma
     m_uiRecentMessageCount = 2000;
-    int defaultDeviceNum = 0;
     std::string configPath = Common::getConfigPath();
     std::ifstream ifs(configPath);
     if (ifs.is_open()) {
@@ -124,14 +91,12 @@ BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
             ifs >> configJson;
             if (configJson.contains("Bus_Monitor")) {
                 const auto& bmConfig = configJson["Bus_Monitor"];
-                defaultDeviceNum = bmConfig.value("Default_Device_Number", 0);
                 m_uiRecentMessageCount = bmConfig.value("UI_Recent_Line_Count", 2000);
             }
         } catch (const nlohmann::json::parse_error &e) {
             Logger::error("JSON parse error: " + std::string(e.what()));
         }
     }
-    m_deviceIdTextInput->SetValue(std::to_string(defaultDeviceNum));
     
     // BM singleton'ına callback fonksiyonlarını set etme
     BM::getInstance().setUpdateMessagesCallback(
@@ -150,8 +115,6 @@ BusMonitorPanel::BusMonitorPanel(wxWindow* parent) : wxPanel(parent, wxID_ANY) {
             });
         }
     );
-
-    setStatusText("Bus Monitor ready. Press Start.");
 }
 
 BusMonitorPanel::~BusMonitorPanel() {
@@ -160,42 +123,16 @@ BusMonitorPanel::~BusMonitorPanel() {
     }
 }
 
+void BusMonitorPanel::InitializeHardware(unsigned int deviceId, unsigned int streamId) {
+    m_deviceId = deviceId;
+    m_streamId = streamId;
+    setStatusText(wxString::Format("BM Panel Initialized for Device %u, Stream %u. Ready.", m_deviceId, m_streamId));
+}
+
 void BusMonitorPanel::setStatusText(const wxString& text) {
     if (m_mainFrame) {
         m_mainFrame->SetStatusText(text);
     }
-}
-
-void BusMonitorPanel::appendMessagesToUi(const wxString& newMessagesChunk) {
-    m_messageList->AppendText(newMessagesChunk);
-    int lines = m_messageList->GetNumberOfLines();
-    if (lines > m_uiRecentMessageCount) {
-        int linesToRemove = lines - m_uiRecentMessageCount;
-        long pos = m_messageList->XYToPosition(0, linesToRemove);
-        if (pos > 0) {
-            m_messageList->Remove(0, pos);
-        }
-    }
-}
-
-void BusMonitorPanel::updateTreeItemVisualState(char bus, int rt, int sa, bool isActive) {
-    int bus_idx = (toupper(bus) == 'A') ? 0 : 1;
-    if (bus_idx >= BUS_COUNT || rt >= RT_COUNT || sa >= SA_COUNT) return;
-
-    auto& model = MilStd1553::getInstance();
-    wxTreeItemId busTreeId = model.busList.at(bus_idx).getTreeObject();
-    wxTreeItemId rtTreeId  = model.busList.at(bus_idx).rtList.at(rt).getTreeObject();
-    wxTreeItemId saTreeId  = model.busList.at(bus_idx).rtList.at(rt).saList.at(sa).getTreeObject();
-
-    if (isActive) {
-        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(saTreeId, *wxGREEN);
-        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(rtTreeId, *wxGREEN);
-        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemTextColour(busTreeId, *wxGREEN);
-        
-        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemBold(saTreeId, true);
-        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemBold(rtTreeId, true);
-        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemBold(busTreeId, true);
-    } 
 }
 
 void BusMonitorPanel::onStartStopClicked(wxCommandEvent &) {
@@ -205,55 +142,51 @@ void BusMonitorPanel::onStartStopClicked(wxCommandEvent &) {
         m_startStopButton->SetLabelText("Start");
         m_startStopButton->SetBackgroundColour(wxColour("#ffcc00"));
         setStatusText("Monitoring stopped. Ready to start.");
-        m_deviceIdTextInput->Enable(true);
-        m_streamChoiceComboBox->Enable(true);
-        wxCommandEvent emptyEvent;
-        onClearFilterClicked(emptyEvent);
     } else {
-        long deviceNumLong = -1;
-        if (!m_deviceIdTextInput->GetValue().ToLong(&deviceNumLong) || deviceNumLong < 0) {
-            wxMessageBox("Invalid Device ID. Please enter a non-negative integer.", "Error", wxOK | wxICON_ERROR, this);
-            return;
-        }
-
-        AiUInt32 openConnections = 0;
-        BM::getInstance().checkDeviceInUse(static_cast<AiUInt32>(deviceNumLong), openConnections);
-        if (openConnections > 0) {
-            wxString msg;
-            msg.Printf("Warning: Device %ld might be in use by another process (%u open handles). Continue?", deviceNumLong, openConnections);
-            if (wxMessageBox(msg, "Device In Use", wxYES_NO | wxICON_WARNING, this) != wxYES) {
-                return;
-            }
-        }
-        
         bool shouldLogData = m_logToFileCheckBox->IsChecked();
         BM::getInstance().enableDataLogging(shouldLogData);
-
         resetTreeVisualState();
         m_messageList->Clear();
 
         ConfigBmUi bmConfig;
-        bmConfig.ulDevice = static_cast<AiUInt32>(deviceNumLong);
-        bmConfig.ulStream = static_cast<AiUInt32>(m_streamChoiceComboBox->GetSelection() + 1);
+        bmConfig.ulDevice = m_deviceId;
+        bmConfig.ulStream = m_streamId;
         bmConfig.ulCoupling = API_CAL_CPL_TRANSFORM;
         
-        setStatusText(wxString::Format("Starting monitoring on device %ld, stream %u...", deviceNumLong, bmConfig.ulStream));
+        setStatusText(wxString::Format("Starting monitoring on device %u, stream %u...", m_deviceId, m_streamId));
         
         AiReturn bmStartRet = BM::getInstance().start(bmConfig);
         if (bmStartRet == API_OK) {
-            setStatusText(wxString::Format("Monitoring started on device %ld, stream %u", deviceNumLong, bmConfig.ulStream));
+            setStatusText(wxString::Format("Monitoring started on device %u, stream %u", m_deviceId, m_streamId));
             m_startStopButton->SetLabelText("Stop");
             m_startStopButton->SetBackgroundColour(wxColour("#ff4545"));
             m_startStopButton->SetForegroundColour(wxColour("white"));
-            m_deviceIdTextInput->Enable(false);
-            m_streamChoiceComboBox->Enable(false);
         } else {
             std::string errorString = getAIMApiErrorMessage(bmStartRet);
-            setStatusText(("Error starting: " + errorString).c_str());
+            setStatusText(("Error starting BM: " + errorString).c_str());
             wxMessageBox("Failed to start Bus Monitor: " + errorString, "Error", wxOK | wxICON_ERROR, this);
-            m_deviceIdTextInput->Enable(true);
-            m_streamChoiceComboBox->Enable(true);
         }
+    }
+}
+
+void BusMonitorPanel::onResetStreamClicked(wxCommandEvent &event) {
+    if (BM::getInstance().isMonitoring()) {
+        wxMessageBox("Please stop the monitor before resetting a stream.", "Warning", wxOK | wxICON_WARNING, this);
+        return;
+    }
+
+    wxString msg;
+    msg.Printf("Are you sure you want to reset Stream %u on Device %u?\nThis will clear its configuration.", m_streamId, m_deviceId);
+    if (wxMessageBox(msg, "Confirm Reset", wxYES_NO | wxICON_QUESTION, this) != wxYES) {
+        return;
+    }
+
+    AiReturn ret = BM::getInstance().resetStream(m_deviceId, m_streamId);
+    if (ret == API_OK) {
+        setStatusText(wxString::Format("Stream %u successfully reset.", m_streamId));
+    } else {
+        std::string errorString = getAIMApiErrorMessage(ret);
+        setStatusText(wxString::Format("Failed to reset Stream %u: %s", m_streamId, errorString.c_str()));
     }
 }
 
@@ -270,6 +203,18 @@ void BusMonitorPanel::onClearClicked(wxCommandEvent &) {
     m_messageList->Clear();
     resetTreeVisualState();
     setStatusText("Messages cleared.");
+}
+
+void BusMonitorPanel::appendMessagesToUi(const wxString& newMessagesChunk) {
+    m_messageList->AppendText(newMessagesChunk);
+    int lines = m_messageList->GetNumberOfLines();
+    if (lines > m_uiRecentMessageCount) {
+        int linesToRemove = lines - m_uiRecentMessageCount;
+        long pos = m_messageList->XYToPosition(0, linesToRemove);
+        if (pos > 0) {
+            m_messageList->Remove(0, pos);
+        }
+    }
 }
 
 void BusMonitorPanel::onTreeItemClicked(wxTreeEvent &event) {
@@ -355,6 +300,26 @@ void BusMonitorPanel::resetTreeVisualState() {
     }
 }
 
+void BusMonitorPanel::updateTreeItemVisualState(char bus, int rt, int sa, bool isActive) {
+    int bus_idx = (toupper(bus) == 'A') ? 0 : 1;
+    if (bus_idx >= BUS_COUNT || rt >= RT_COUNT || sa >= SA_COUNT) return;
+
+    auto& model = MilStd1553::getInstance();
+    wxTreeItemId busTreeId = model.busList.at(bus_idx).getTreeObject();
+    wxTreeItemId rtTreeId  = model.busList.at(bus_idx).rtList.at(rt).getTreeObject();
+    wxTreeItemId saTreeId  = model.busList.at(bus_idx).rtList.at(rt).saList.at(sa).getTreeObject();
+
+    if (isActive) {
+        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(saTreeId, *wxGREEN);
+        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(rtTreeId, *wxGREEN);
+        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemTextColour(busTreeId, *wxGREEN);
+        
+        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemBold(saTreeId, true);
+        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemBold(rtTreeId, true);
+        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemBold(busTreeId, true);
+    } 
+}
+
 void BusMonitorPanel::onLogToFileToggled(wxCommandEvent &event) {
     bool isChecked = event.IsChecked();
     BM::getInstance().enableDataLogging(isChecked);
@@ -364,34 +329,5 @@ void BusMonitorPanel::onLogToFileToggled(wxCommandEvent &event) {
     } else {
         setStatusText("Data logging to file disabled.");
         Logger::info("Data logging to file DISABLED by user.");
-    }
-}
-
-void BusMonitorPanel::onResetStreamClicked(wxCommandEvent &event) {
-    if (BM::getInstance().isMonitoring()) {
-        wxMessageBox("Please stop the monitor before resetting a stream.", "Warning", wxOK | wxICON_WARNING, this);
-        return;
-    }
-
-    long deviceNumLong = -1;
-    m_deviceIdTextInput->GetValue().ToLong(&deviceNumLong);
-
-    int selectedIndex = m_streamChoiceComboBox->GetSelection();
-    if (selectedIndex == wxNOT_FOUND) return;
-    
-    int streamToReset = selectedIndex + 1;
-
-    wxString msg;
-    msg.Printf("Are you sure you want to reset Stream %d on Device %ld?\nThis will clear its configuration.", streamToReset, deviceNumLong);
-    if (wxMessageBox(msg, "Confirm Reset", wxYES_NO | wxICON_QUESTION, this) != wxYES) {
-        return;
-    }
-
-    AiReturn ret = BM::getInstance().resetStream(static_cast<AiUInt32>(deviceNumLong), streamToReset);
-    if (ret == API_OK) {
-        setStatusText(wxString::Format("Stream %d successfully reset.", streamToReset));
-    } else {
-        std::string errorString = getAIMApiErrorMessage(ret);
-        setStatusText(wxString::Format("Failed to reset Stream %d: %s", streamToReset, errorString.c_str()));
     }
 }

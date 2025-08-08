@@ -8,4 +8,6 @@ set(SOURCEFILES
     ${CMAKE_CURRENT_LIST_DIR}/src/ui/BusMonitorPanel.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ui/CreateFrameWindow.cpp
     ${CMAKE_CURRENT_LIST_DIR}/src/ui/FrameComponent.cpp
+    ${CMAKE_CURRENT_LIST_DIR}/src/ui/DeviceSelectionPanel.cpp
+
 )
