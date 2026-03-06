@@ -1,0 +1,333 @@
+#include "BusMonitorPanel.hpp"
+#include "MainFrame.hpp"
+#include "bm.hpp"
+#include "milStd1553.hpp"
+#include "logger.hpp"
+#include "common.hpp"
+
+#include <nlohmann/json.hpp>
+#include <fstream>
+#include <string>
+#include <wx/sizer.h>
+#include <wx/settings.h>
+#include <wx/valnum.h>
+#include <wx/app.h>
+#include <wx/msgdlg.h>
+
+BusMonitorPanel::BusMonitorPanel(wxWindow* parent) 
+    : wxPanel(parent, wxID_ANY), m_deviceId(0), m_streamId(0) {
+
+    m_mainFrame = dynamic_cast<MainFrame*>(wxGetTopLevelParent(this));
+    
+    // Sizer'lar
+    auto *topHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *bottomHorizontalSizer = new wxBoxSizer(wxHORIZONTAL);
+    auto *mainVerticalSizer = new wxBoxSizer(wxVERTICAL);
+
+    // Arayüz elemanları (Device ID ve Stream seçimi kaldırıldı)
+    m_startStopButton = new wxButton(this, wxID_ANY, "Start", wxDefaultPosition, wxSize(100, -1));
+    m_startStopButton->SetBackgroundColour(wxColour("#ffcc00"));
+    m_resetStreamButton = new wxButton(this, wxID_ANY, "Reset Current Stream");
+    m_filterButton = new wxButton(this, wxID_ANY, "No filter set. Click a tree item to filter.", wxDefaultPosition, wxDefaultSize, wxBU_LEFT);
+    m_filterButton->Enable(false);
+    auto *clearButton = new wxButton(this, wxID_ANY, "Clear");
+    m_logToFileCheckBox = new wxCheckBox(this, wxID_ANY, "Log to File"); 
+
+    m_milStd1553Tree = new wxTreeCtrl(this, wxID_ANY, wxDefaultPosition, wxSize(250, -1), wxTR_DEFAULT_STYLE | wxTR_HIDE_ROOT);
+    auto rtSaTreeRoot = m_milStd1553Tree->AddRoot("MIL-STD-1553 Buses");
+    for (size_t i = 0; i < MilStd1553::getInstance().busList.size(); ++i) {
+        auto& bus = MilStd1553::getInstance().busList.at(i);
+        bus.setTreeObject(m_milStd1553Tree->AppendItem(rtSaTreeRoot, bus.getName()));
+        for (size_t j = 0; j < bus.rtList.size(); ++j) {
+            auto& rt = bus.rtList.at(j);
+            rt.setTreeObject(m_milStd1553Tree->AppendItem(bus.getTreeObject(), rt.getName()));
+            for (size_t k = 0; k < rt.saList.size(); ++k) {
+                auto& sa = rt.saList.at(k);
+                sa.setTreeObject(m_milStd1553Tree->AppendItem(rt.getTreeObject(), sa.getName()));
+            }
+            wxTreeItemId mcRoot = m_milStd1553Tree->AppendItem(rt.getTreeObject(), "Mode Codes");
+            for (const auto& mc_pair : MilStd1553::getModeCodeList()) {
+                wxString mcLabel = wxString::Format("MC %d: %s", mc_pair.first, mc_pair.second);
+                wxTreeItemId mcItem = m_milStd1553Tree->AppendItem(mcRoot, mcLabel);
+                m_treeItemToMcMap[mcItem] = mc_pair.first;
+            }
+        }
+        if (i == 0) m_milStd1553Tree->Expand(bus.getTreeObject()); 
+    }
+    
+    m_messageList = new wxTextCtrl(this, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_READONLY | wxHSCROLL | wxTE_DONTWRAP);
+    wxFont font(10, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+    m_messageList->SetFont(font);
+
+    // Layout (Sadeleştirilmiş hali)
+    topHorizontalSizer->Add(m_startStopButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    topHorizontalSizer->Add(m_resetStreamButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    topHorizontalSizer->Add(m_filterButton, 1, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    topHorizontalSizer->Add(m_logToFileCheckBox, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5); 
+    topHorizontalSizer->Add(clearButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    
+    bottomHorizontalSizer->Add(m_milStd1553Tree, 0, wxEXPAND | wxALL, 5); 
+    bottomHorizontalSizer->Add(m_messageList, 1, wxEXPAND | wxALL, 5);   
+    
+    mainVerticalSizer->Add(topHorizontalSizer, 0, wxEXPAND | wxALL, 5);
+    mainVerticalSizer->Add(bottomHorizontalSizer, 1, wxEXPAND | wxALL, 5);
+    this->SetSizer(mainVerticalSizer);
+
+    // Olayları Bağlama
+    m_startStopButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onStartStopClicked, this);
+    m_filterButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onClearFilterClicked, this);
+    clearButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onClearClicked, this);
+    m_resetStreamButton->Bind(wxEVT_BUTTON, &BusMonitorPanel::onResetStreamClicked, this);
+    m_milStd1553Tree->Bind(wxEVT_TREE_ITEM_ACTIVATED, &BusMonitorPanel::onTreeItemClicked, this);
+    m_logToFileCheckBox->Bind(wxEVT_CHECKBOX, &BusMonitorPanel::onLogToFileToggled, this);
+    
+    // Config dosyasından sadece UI ile ilgili ayarları okuma
+    m_uiRecentMessageCount = 2000;
+    std::string configPath = Common::getConfigPath();
+    std::ifstream ifs(configPath);
+    if (ifs.is_open()) {
+        try {
+            nlohmann::json configJson;
+            ifs >> configJson;
+            if (configJson.contains("Bus_Monitor")) {
+                const auto& bmConfig = configJson["Bus_Monitor"];
+                m_uiRecentMessageCount = bmConfig.value("UI_Recent_Line_Count", 2000);
+            }
+        } catch (const nlohmann::json::parse_error &e) {
+            Logger::error("JSON parse error: " + std::string(e.what()));
+        }
+    }
+    
+    // BM singleton'ına callback fonksiyonlarını set etme
+    BM::getInstance().setUpdateMessagesCallback(
+        [this](const std::string& messages) {
+            if(!this) return;
+            wxTheApp->CallAfter([this, messages] {
+                if (this) appendMessagesToUi(wxString::FromUTF8(messages.c_str()));
+            });
+        }
+    );
+    BM::getInstance().setUpdateTreeItemCallback(
+        [this](char bus, int rt, int sa, bool isActive) {
+            if(!this) return;
+            wxTheApp->CallAfter([this, bus, rt, sa, isActive] {
+                if (this) updateTreeItemVisualState(bus, rt, sa, isActive);
+            });
+        }
+    );
+}
+
+BusMonitorPanel::~BusMonitorPanel() {
+    if (BM::getInstance().isMonitoring()) {
+        BM::getInstance().stop();
+    }
+}
+
+void BusMonitorPanel::InitializeHardware(unsigned int deviceId, unsigned int streamId) {
+    m_deviceId = deviceId;
+    m_streamId = streamId;
+    setStatusText(wxString::Format("BM Panel Initialized for Device %u, Stream %u. Ready.", m_deviceId, m_streamId));
+}
+
+void BusMonitorPanel::setStatusText(const wxString& text) {
+    if (m_mainFrame) {
+        m_mainFrame->SetStatusText(text);
+    }
+}
+
+void BusMonitorPanel::onStartStopClicked(wxCommandEvent &) {
+    if (BM::getInstance().isMonitoring()) {
+        setStatusText("Stopping monitoring...");
+        BM::getInstance().stop();
+        m_startStopButton->SetLabelText("Start");
+        m_startStopButton->SetBackgroundColour(wxColour("#ffcc00"));
+        setStatusText("Monitoring stopped. Ready to start.");
+    } else {
+        bool shouldLogData = m_logToFileCheckBox->IsChecked();
+        BM::getInstance().enableDataLogging(shouldLogData);
+        resetTreeVisualState();
+        m_messageList->Clear();
+
+        ConfigBmUi bmConfig;
+        bmConfig.ulDevice = m_deviceId;
+        bmConfig.ulStream = m_streamId;
+        bmConfig.ulCoupling = API_CAL_CPL_TRANSFORM;
+        
+        setStatusText(wxString::Format("Starting monitoring on device %u, stream %u...", m_deviceId, m_streamId));
+        
+        AiReturn bmStartRet = BM::getInstance().start(bmConfig);
+        if (bmStartRet == API_OK) {
+            setStatusText(wxString::Format("Monitoring started on device %u, stream %u", m_deviceId, m_streamId));
+            m_startStopButton->SetLabelText("Stop");
+            m_startStopButton->SetBackgroundColour(wxColour("#ff4545"));
+            m_startStopButton->SetForegroundColour(wxColour("white"));
+        } else {
+            std::string errorString = getAIMApiErrorMessage(bmStartRet);
+            setStatusText(("Error starting BM: " + errorString).c_str());
+            wxMessageBox("Failed to start Bus Monitor: " + errorString, "Error", wxOK | wxICON_ERROR, this);
+        }
+    }
+}
+
+void BusMonitorPanel::onResetStreamClicked(wxCommandEvent &event) {
+    if (BM::getInstance().isMonitoring()) {
+        wxMessageBox("Please stop the monitor before resetting a stream.", "Warning", wxOK | wxICON_WARNING, this);
+        return;
+    }
+
+    wxString msg;
+    msg.Printf("Are you sure you want to reset Stream %u on Device %u?\nThis will clear its configuration.", m_streamId, m_deviceId);
+    if (wxMessageBox(msg, "Confirm Reset", wxYES_NO | wxICON_QUESTION, this) != wxYES) {
+        return;
+    }
+
+    AiReturn ret = BM::getInstance().resetStream(m_deviceId, m_streamId);
+    if (ret == API_OK) {
+        setStatusText(wxString::Format("Stream %u successfully reset.", m_streamId));
+    } else {
+        std::string errorString = getAIMApiErrorMessage(ret);
+        setStatusText(wxString::Format("Failed to reset Stream %u: %s", m_streamId, errorString.c_str()));
+    }
+}
+
+void BusMonitorPanel::onClearFilterClicked(wxCommandEvent &) {
+    if (!BM::getInstance().isFilterEnabled()) return;
+    BM::getInstance().enableFilter(false);
+    m_filterButton->SetLabelText("No filter set. Click a tree item to filter.");
+    m_filterButton->Enable(false);
+    resetTreeVisualState();
+    setStatusText("Filter cleared.");
+}
+
+void BusMonitorPanel::onClearClicked(wxCommandEvent &) {
+    m_messageList->Clear();
+    resetTreeVisualState();
+    setStatusText("Messages cleared.");
+}
+
+void BusMonitorPanel::appendMessagesToUi(const wxString& newMessagesChunk) {
+    m_messageList->AppendText(newMessagesChunk);
+    int lines = m_messageList->GetNumberOfLines();
+    if (lines > m_uiRecentMessageCount) {
+        int linesToRemove = lines - m_uiRecentMessageCount;
+        long pos = m_messageList->XYToPosition(0, linesToRemove);
+        if (pos > 0) {
+            m_messageList->Remove(0, pos);
+        }
+    }
+}
+
+void BusMonitorPanel::onTreeItemClicked(wxTreeEvent &event) {
+    wxTreeItemId clickedId = event.GetItem();
+    if (!clickedId.IsOk()) return;
+    char filterBusChar = 0;
+    int filterRt = -1;
+    int filterSa = -1;
+    int filterMc = -1;
+    bool found = false;
+    auto& model = MilStd1553::getInstance();
+    auto it = m_treeItemToMcMap.find(clickedId);
+
+    if (it != m_treeItemToMcMap.end()) {
+        filterMc = it->second; 
+        wxTreeItemId rtId = m_milStd1553Tree->GetItemParent(m_milStd1553Tree->GetItemParent(clickedId));
+        wxTreeItemId busId = m_milStd1553Tree->GetItemParent(rtId);
+        for(int i = 0; i < BUS_COUNT; ++i) {
+            if (model.busList.at(i).getTreeObject() == busId) {
+                filterBusChar = (i == 0) ? 'A' : 'B';
+                for (int j = 0; j < RT_COUNT; ++j) {
+                    if (model.busList.at(i).rtList.at(j).getTreeObject() == rtId) {
+                        filterRt = j;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+        }
+    } else {
+        for (int i = 0; i < BUS_COUNT && !found; ++i) {
+            auto& bus = model.busList.at(i);
+            if (bus.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; found = true; break; }
+            for (size_t j = 0; j < bus.rtList.size() && !found; ++j) {
+                auto& rt = bus.rtList.at(j);
+                if (rt.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; found = true; break; }
+                for (size_t k = 0; k < rt.saList.size() && !found; ++k) {
+                    auto& sa = rt.saList.at(k);
+                    if (sa.getTreeObject() == clickedId) { filterBusChar = (i == 0) ? 'A' : 'B'; filterRt = j; filterSa = k; found = true; break; }
+                }
+            }
+        }
+    }
+
+    if (found) {
+        BM::getInstance().setFilterCriteria(filterBusChar, filterRt, filterSa, filterMc);
+        BM::getInstance().enableFilter(true);
+        wxString filterLabel = "Filtering by: ";
+        if(filterBusChar != 0) filterLabel += wxString::Format("Bus %c", filterBusChar);
+        if(filterRt != -1) filterLabel += wxString::Format(", RT %d", filterRt);
+        if(filterSa != -1) filterLabel += wxString::Format(", SA %d", filterSa);
+        if(filterMc != -1) filterLabel += wxString::Format(", MC %d", filterMc);
+        m_filterButton->SetLabelText(filterLabel);
+        m_filterButton->Enable(true);
+        resetTreeVisualState();
+        m_milStd1553Tree->SetItemBold(clickedId, true);
+        m_milStd1553Tree->EnsureVisible(clickedId);
+        setStatusText(filterLabel);
+    }
+}
+
+void BusMonitorPanel::resetTreeVisualState() {
+    auto& model = MilStd1553::getInstance();
+    wxColour defaultColour = wxSystemSettings::GetColour(wxSYS_COLOUR_WINDOWTEXT);
+    for (const auto& bus : model.busList) {
+        if(bus.getTreeObject().IsOk()) { 
+            m_milStd1553Tree->SetItemBold(bus.getTreeObject(), false); 
+            m_milStd1553Tree->SetItemTextColour(bus.getTreeObject(), defaultColour); 
+        }
+        for (const auto& rt : bus.rtList) {
+            if(rt.getTreeObject().IsOk()) { 
+                m_milStd1553Tree->SetItemBold(rt.getTreeObject(), false); 
+                m_milStd1553Tree->SetItemTextColour(rt.getTreeObject(), defaultColour); 
+            }
+            for (const auto& sa : rt.saList) {
+                if(sa.getTreeObject().IsOk()) { 
+                    m_milStd1553Tree->SetItemBold(sa.getTreeObject(), false); 
+                    m_milStd1553Tree->SetItemTextColour(sa.getTreeObject(), defaultColour); 
+                }
+            }
+        }
+    }
+}
+
+void BusMonitorPanel::updateTreeItemVisualState(char bus, int rt, int sa, bool isActive) {
+    int bus_idx = (toupper(bus) == 'A') ? 0 : 1;
+    if (bus_idx >= BUS_COUNT || rt >= RT_COUNT || sa >= SA_COUNT) return;
+
+    auto& model = MilStd1553::getInstance();
+    wxTreeItemId busTreeId = model.busList.at(bus_idx).getTreeObject();
+    wxTreeItemId rtTreeId  = model.busList.at(bus_idx).rtList.at(rt).getTreeObject();
+    wxTreeItemId saTreeId  = model.busList.at(bus_idx).rtList.at(rt).saList.at(sa).getTreeObject();
+
+    if (isActive) {
+        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(saTreeId, *wxGREEN);
+        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemTextColour(rtTreeId, *wxGREEN);
+        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemTextColour(busTreeId, *wxGREEN);
+        
+        if (saTreeId.IsOk())  m_milStd1553Tree->SetItemBold(saTreeId, true);
+        if (rtTreeId.IsOk())  m_milStd1553Tree->SetItemBold(rtTreeId, true);
+        if (busTreeId.IsOk()) m_milStd1553Tree->SetItemBold(busTreeId, true);
+    } 
+}
+
+void BusMonitorPanel::onLogToFileToggled(wxCommandEvent &event) {
+    bool isChecked = event.IsChecked();
+    BM::getInstance().enableDataLogging(isChecked);
+    if (isChecked) {
+        setStatusText("Data logging to file enabled.");
+        Logger::info("Data logging to file ENABLED by user.");
+    } else {
+        setStatusText("Data logging to file disabled.");
+        Logger::info("Data logging to file DISABLED by user.");
+    }
+}
